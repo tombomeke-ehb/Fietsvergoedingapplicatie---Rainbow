@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+enum Role {
+  EMPLOYEE
+  ADMIN
+  PAYROLL
+}
+
+enum Country {
+  BE
+  NL
+}
+
+enum BikeType {
+  OWN
+  COMPANY
+}
+
+enum TripType {
+  FULL
+  PARTIAL
+}
+
+enum FiscalStatus {
+  TAX_FREE
+  TAXED
+}
+
+enum CapType {
+  NONE
+  MONTHLY
+  YEARLY
+  BOTH
+}
+
+enum ExportStatus {
+  GENERATED
+  SENT
+}
+
+model User {
+  id       Int      @id @default(autoincrement())
+  name     String
+  role     Role
+  country  Country
+
+  /// Enkel relevant voor NL-werknemers (OWN => TAX_FREE, COMPANY => TAXED)
+  bikeType BikeType?
+
+  /// Stamgegevens (verklaring op eer): exact 2 afstanden
+  profile  EmployeeProfile?
+
+  trips    TripEntry[]
+  exports  MonthlyExport[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmployeeProfile {
+  id               Int   @id @default(autoincrement())
+  userId           Int   @unique
+
+  /// Afstand volledig woon-werk (altijd aanwezig)
+  fullCommuteKm    Float
+
+  /// Afstand gedeeltelijk traject (volgens analyse: ook aanwezig als “PARTIAL” gebruikt kan worden)
+  partialCommuteKm Float
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CountrySettings {
+  id                  Int     @id @default(autoincrement())
+  country             Country @unique
+
+  /// Bedrag per km dat werkgever instelt (per land configureerbaar)
+  ratePerKm            Float
+
+  /// Deadline dag in de volgende maand (bv. 12 of 15)
+  deadlineDayNextMonth Int
+
+  /// Limieten (maand/jaar) configureerbaar
+  capType          CapType @default(NONE)
+  monthlyCapAmount Float?
+  yearlyCapAmount  Float?
+
+  /// België: blokkeren na bereiken belastingvrij plafond (in jullie case: true)
+  beBlockAfterCap Boolean @default(true)
+
+  /// Op welke dag export normaliter wordt gegenereerd (PoC kan manueel triggeren)
+  exportDayOfMonth Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TripEntry {
+  id       Int     @id @default(autoincrement())
+  userId   Int
+  date     String  // "YYYY-MM-DD" (business date, timezone-safe)
+  tripType TripType
+
+  /// Om max 2 registraties per dag technisch “afdwingbaar” te maken:
+  /// sequence = 1 of 2 (app kiest een vrije slot)
+  sequence Int
+
+  /// Snapshots zodat historische data niet verandert bij latere tariefwijzigingen
+  kmSnapshot           Float
+  amountSnapshot       Float
+  fiscalStatusSnapshot FiscalStatus
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, sequence])
+  @@index([userId, date])
+}
+
+model MonthlyExport {
+  id        Int    @id @default(autoincrement())
+  userId    Int
+  yearMonth String // "YYYY-MM"
+
+  totalKm     Float
+  totalAmount Float
+
+  /// Voor NL nuttig: opsplitsing belast / onbelast (kan ook voor BE leeg blijven)
+  totalTaxFreeAmount Float?
+  totalTaxedAmount   Float?
+
+  status      ExportStatus @default(GENERATED)
+  generatedAt DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, yearMonth])
+  @@index([yearMonth])
+}
