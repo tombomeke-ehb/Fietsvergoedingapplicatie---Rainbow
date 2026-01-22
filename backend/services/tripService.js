@@ -1,44 +1,22 @@
-// backend/services/tripService.js
 const { PrismaClient, FiscalStatus, Country, TripType, CapType } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-function getYearMonth(dateStr) {
-  // "YYYY-MM-DD" -> "YYYY-MM"
-  return dateStr.slice(0, 7);
-}
+// Helpers
+function getYearMonth(dateStr) { return dateStr.slice(0, 7); }
+function parseYMD(dateStr) { const [y, m, d] = dateStr.split("-").map(Number); return { y, m, d }; }
+function moneyCents(amount) { return Math.round(amount * 100); }
+function centsToMoney(cents) { return cents / 100; }
 
-function parseYMD(dateStr) {
-  // dateStr = "YYYY-MM-DD"
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return { y, m, d };
-}
-
-function isAfterDeadlineForMonth(dateStr, deadlineDayNextMonth, now = new Date()) {
-  // Registraties voor maand M mogen tot dag X in maand M+1
-  const { y, m } = parseYMD(dateStr); // month = 1..12
-  const monthIndex = m - 1; // JS 0..11
-
-  // deadline in de volgende maand:
-  const deadlineDate = new Date(y, monthIndex + 1, deadlineDayNextMonth, 23, 59, 59, 999);
+function isAfterDeadlineForMonth(dateStr, deadlineDayNextMonth) {
+  const now = new Date();
+  const { y, m } = parseYMD(dateStr);
+  // Deadline is dag X in maand M+1
+  const deadlineDate = new Date(y, m, deadlineDayNextMonth, 23, 59, 59, 999);
   return now > deadlineDate;
 }
 
-function moneyCents(amount) {
-  return Math.round(amount * 100);
-}
-
-function centsToMoney(cents) {
-  return cents / 100;
-}
-
-async function getCountrySettings(country) {
-  return prisma.countrySettings.findUnique({ where: { country } });
-}
-
-async function sumAmountForUserYear(userId, year) {
-  // som van amountSnapshot voor alle trips in dit jaar
-  const from = `${year}-01-01`;
-  const to = `${year}-12-31`;
+// Aggregaties voor limieten
+async function sumAmount(userId, from, to) {
   const agg = await prisma.tripEntry.aggregate({
     where: { userId, date: { gte: from, lte: to } },
     _sum: { amountSnapshot: true }
@@ -46,105 +24,81 @@ async function sumAmountForUserYear(userId, year) {
   return agg._sum.amountSnapshot || 0;
 }
 
-async function sumAmountForUserMonth(userId, yearMonth) {
-  const from = `${yearMonth}-01`;
-  const to = `${yearMonth}-31`;
-  const agg = await prisma.tripEntry.aggregate({
-    where: { userId, date: { gte: from, lte: to } },
-    _sum: { amountSnapshot: true }
-  });
-  return agg._sum.amountSnapshot || 0;
-}
-
-async function pickSequenceSlot(userId, dateStr) {
-  const existing = await prisma.tripEntry.findMany({
-    where: { userId, date: dateStr },
-    select: { sequence: true }
-  });
-  const used = new Set(existing.map(e => e.sequence));
-  if (!used.has(1)) return 1;
-  if (!used.has(2)) return 2;
-  return null;
-}
-
+// 1. Create Trip
 async function createTripEntry({ user, date, tripType }) {
-  // Basic validations
-  if (!user.profile) throw Object.assign(new Error("NO_PROFILE"), { status: 400 });
+  if (!user.profile) throw { status: 400, message: "NO_PROFILE" };
 
-  const settings = await getCountrySettings(user.country);
-  if (!settings) throw Object.assign(new Error("NO_COUNTRY_SETTINGS"), { status: 500 });
+  const settings = await prisma.countrySettings.findUnique({ where: { country: user.country } });
+  if (!settings) throw { status: 500, message: "NO_COUNTRY_SETTINGS" };
 
-  // deadline check
+  // A. Deadline Check
   if (isAfterDeadlineForMonth(date, settings.deadlineDayNextMonth)) {
-    throw Object.assign(new Error("DEADLINE_PASSED"), { status: 409 });
+    throw { status: 409, message: "DEADLINE_PASSED" };
   }
 
-  // max 2/day using sequence slots
-  const seq = await pickSequenceSlot(user.id, date);
-  if (!seq) throw Object.assign(new Error("MAX_2_PER_DAY"), { status: 409 });
+  // B. Max 2 per dag Check
+  const existing = await prisma.tripEntry.findMany({ where: { userId: user.id, date } });
+  if (existing.length >= 2) throw { status: 409, message: "MAX_2_PER_DAY" };
+  
+  // Bepaal vrije slot (1 of 2)
+  const seq = existing.some(e => e.sequence === 1) ? 2 : 1;
 
-  // Determine km from profile
-  let km;
-  if (tripType === TripType.FULL) km = user.profile.fullCommuteKm;
-  else km = user.profile.partialCommuteKm;
+  // C. Data ophalen uit profiel
+  let km = tripType === TripType.FULL ? user.profile.fullCommuteKm : user.profile.partialCommuteKm;
+  if (!km || km <= 0) throw { status: 400, message: "INVALID_KM_PROFILE" };
 
-  if (typeof km !== "number" || km <= 0) {
-    throw Object.assign(new Error("INVALID_KM_PROFILE"), { status: 400 });
-  }
-
-  // Determine fiscal status
+  // D. Fiscaal statuut
   let fiscalStatus = FiscalStatus.TAX_FREE;
   if (user.country === Country.NL) {
-    if (!user.bikeType) throw Object.assign(new Error("MISSING_BIKE_TYPE_NL"), { status: 400 });
+    if (!user.bikeType) throw { status: 400, message: "MISSING_BIKE_TYPE_NL" };
     fiscalStatus = (user.bikeType === "OWN") ? FiscalStatus.TAX_FREE : FiscalStatus.TAXED;
-  } else {
-    // België: altijd TAX_FREE binnen plafond (maar blokkeren boven plafond)
-    fiscalStatus = FiscalStatus.TAX_FREE;
   }
 
-  // Amount calculation with cents safety
+  // E. Bedrag berekenen
   const amount = centsToMoney(moneyCents(km * settings.ratePerKm));
 
-  // Belgium caps hard block
+  // F. BE Plafond blokkering
   if (user.country === Country.BE && settings.beBlockAfterCap) {
     const ym = getYearMonth(date);
     const { y } = parseYMD(date);
-
-    let wouldExceed = false;
+    let capHit = false;
 
     if (settings.capType === CapType.MONTHLY || settings.capType === CapType.BOTH) {
-      if (settings.monthlyCapAmount != null) {
-        const current = await sumAmountForUserMonth(user.id, ym);
-        if (current + amount > settings.monthlyCapAmount) wouldExceed = true;
-      }
+      const current = await sumAmount(user.id, `${ym}-01`, `${ym}-31`);
+      if (current + amount > settings.monthlyCapAmount) capHit = true;
     }
-
     if (settings.capType === CapType.YEARLY || settings.capType === CapType.BOTH) {
-      if (settings.yearlyCapAmount != null) {
-        const current = await sumAmountForUserYear(user.id, y);
-        if (current + amount > settings.yearlyCapAmount) wouldExceed = true;
-      }
+      const current = await sumAmount(user.id, `${y}-01-01`, `${y}-12-31`);
+      if (current + amount > settings.yearlyCapAmount) capHit = true;
     }
 
-    if (wouldExceed) {
-      throw Object.assign(new Error("CAP_REACHED_BE_BLOCK"), { status: 409 });
-    }
+    if (capHit) throw { status: 409, message: "CAP_REACHED_BE_BLOCK" };
   }
 
-  // Create trip with snapshots
-  const trip = await prisma.tripEntry.create({
+  return prisma.tripEntry.create({
     data: {
-      userId: user.id,
-      date,
-      tripType,
-      sequence: seq,
-      kmSnapshot: km,
-      amountSnapshot: amount,
-      fiscalStatusSnapshot: fiscalStatus
+      userId: user.id, date, tripType, sequence: seq,
+      kmSnapshot: km, amountSnapshot: amount, fiscalStatusSnapshot: fiscalStatus
     }
   });
+}
 
-  return trip;
+// 2. Delete Trip
+async function deleteTripEntry(tripId, userId) {
+  const trip = await prisma.tripEntry.findUnique({ where: { id: tripId } });
+  
+  if (!trip) throw { status: 404, message: "NOT_FOUND" };
+  if (trip.userId !== userId) throw { status: 403, message: "FORBIDDEN" };
+
+  // Ophalen settings voor deadline check bij verwijderen
+  const user = await prisma.user.findUnique({ where: { id: userId }});
+  const settings = await prisma.countrySettings.findUnique({ where: { country: user.country } });
+
+  if (isAfterDeadlineForMonth(trip.date, settings.deadlineDayNextMonth)) {
+    throw { status: 409, message: "DEADLINE_PASSED" };
+  }
+
+  return prisma.tripEntry.delete({ where: { id: tripId } });
 }
 
 async function listTripsForMonth(userId, yearMonth) {
@@ -156,7 +110,4 @@ async function listTripsForMonth(userId, yearMonth) {
   });
 }
 
-module.exports = {
-  createTripEntry,
-  listTripsForMonth
-};
+module.exports = { createTripEntry, deleteTripEntry, listTripsForMonth };
