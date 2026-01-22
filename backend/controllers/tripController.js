@@ -55,3 +55,19 @@ exports.listTrips = async (req, res) => {
     res.status(500).json({ error: "TRIP_LIST_ERROR" });
   }
 };
+
+const tripEntryService = require('../services/tripService');
+
+exports.getAvailableMonths = async (req, res) => {
+  try {
+    // userId komt uit auth middleware
+    const userId = req.user.id;
+
+    const months = await tripEntryService.getAvailableMonthsForUser(userId);
+    res.json(months); // bv ["2026-01","2025-12",...]
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'MONTH_LIST_ERROR' });
+  }
+};
+

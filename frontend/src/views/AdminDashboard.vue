@@ -7,6 +7,31 @@
 
     <!-- Quick Actions / Stats Placeholder could go here -->
 
+    <!-- Add New User -->
+    <div class="card">
+      <h2>Nieuwe gebruiker toevoegen</h2>
+      <form @submit.prevent="addUser">
+        <label>Naam:
+          <input v-model="newUser.name" type="text" required />
+        </label>
+        <label>Land:
+          <select v-model="newUser.country" required>
+            <option value="BE">België</option>
+            <option value="NL">Nederland</option>
+          </select>
+        </label>
+        <label>Rol:
+          <select v-model="newUser.role" required>
+            <option value="EMPLOYEE">Werknemer</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+        </label>
+        <button type="submit">Gebruiker toevoegen</button>
+      </form>
+      <p v-if="addUserMsg" class="success">{{ addUserMsg }}</p>
+      <p v-if="addUserError" class="error">{{ addUserError }}</p>
+    </div>
+
     <!-- Employee Profile Management -->
     <div class="card">
       <div class="card-header">
@@ -234,6 +259,10 @@ const employees = ref([]);
 const profileMsg = ref("");
 const profileError = ref("");
 
+const newUser = ref({ name: '', country: 'BE', role: 'EMPLOYEE' });
+const addUserMsg = ref('');
+const addUserError = ref('');
+
 const selectedCountry = ref("BE");
 const settings = ref(null);
 const settingsMsg = ref('');
@@ -247,7 +276,9 @@ const exportError = ref("");
 async function fetchEmployees() {
   profileError.value = '';
   try {
-    const res = await fetch(`${API}/employees`, { headers: userStore.authHeaders });
+    const res = await fetch(`${API}/employees`, {
+      headers: userStore.getAuthHeaders(false) // ✅ GET
+    });
     if (!res.ok) throw new Error('Kon werknemers niet ophalen');
 
     const data = await res.json();
@@ -255,16 +286,11 @@ async function fetchEmployees() {
     employees.value = data.map((emp) => {
       if (!emp.profile) emp.profile = { fullCommuteKm: 0, partialCommuteKm: 0 };
 
-      // Zorg dat bikeType voor NL altijd een geldige enum is (OWN/COMPANY)
       const c = (emp.country || '').toUpperCase();
       if (c === 'NL') {
         if (!emp.bikeType) emp.bikeType = 'OWN';
         if (!['OWN', 'COMPANY'].includes(emp.bikeType)) emp.bikeType = 'OWN';
-      } else {
-        // Voor BE mag bikeType eigenlijk irrelevant zijn
-        // (we laten het staan als backend het meegeeft, maar UI toont het niet)
       }
-
       return emp;
     });
   } catch (e) {
@@ -283,16 +309,12 @@ async function saveProfile(emp) {
       partialCommuteKm: Number(emp.profile.partialCommuteKm ?? 0),
     };
 
-    // Enkel NL mag bikeType krijgen volgens je functionele analyse
     const c = (emp.country || '').toUpperCase();
     if (c === 'NL') body.bikeType = emp.bikeType;
 
     const res = await fetch(`${API}/employees/${emp.id}/profile`, {
       method: 'PUT',
-      headers: {
-        ...userStore.authHeaders,
-        'Content-Type': 'application/json',
-      },
+      headers: userStore.getAuthHeaders(true),
       body: JSON.stringify(body),
     });
 
@@ -309,6 +331,29 @@ async function saveProfile(emp) {
   }
 }
 
+// --- Add User ---
+async function addUser() {
+  addUserMsg.value = '';
+  addUserError.value = '';
+  try {
+    const res = await fetch(`${API}/admin/users`, {
+      method: 'POST',
+      headers: userStore.getAuthHeaders(true),
+      body: JSON.stringify(newUser.value)
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      addUserError.value = data.error || 'Fout bij toevoegen';
+      return;
+    }
+    addUserMsg.value = 'Gebruiker toegevoegd!';
+    newUser.value = { name: '', country: 'BE', role: 'EMPLOYEE' };
+    await fetchEmployees();
+  } catch (e) {
+    addUserError.value = e.message;
+  }
+}
+
 // --- Settings ---
 async function fetchSettings() {
   settingsMsg.value = '';
@@ -316,12 +361,18 @@ async function fetchSettings() {
   settings.value = null;
 
   try {
-    const res = await fetch(`${API}/settings/${selectedCountry.value}`, { headers: userStore.authHeaders });
-    if (!res.ok) throw new Error('Kon instellingen niet ophalen');
+    const res = await fetch(`${API}/settings/${selectedCountry.value}`, {
+      headers: userStore.getAuthHeaders(false)
+    });
 
-    const s = await res.json();
+    const data = await res.json().catch(() => ({}));
 
-    // Kleine safety defaults zodat UI niet breekt
+    if (!res.ok) {
+      throw new Error(data.error || 'Kon instellingen niet ophalen');
+    }
+
+    const s = data;
+
     settings.value = {
       ratePerKm: s.ratePerKm ?? 0,
       deadlineDayNextMonth: s.deadlineDayNextMonth ?? 12,
@@ -330,13 +381,11 @@ async function fetchSettings() {
       yearlyCapAmount: s.yearlyCapAmount ?? null,
       beBlockAfterCap: !!s.beBlockAfterCap,
       exportDayOfMonth: s.exportDayOfMonth ?? 1,
-      // laat extra velden (id, createdAt, updatedAt) gerust bestaan op backend,
-      // maar we tonen ze niet in UI.
       ...s,
     };
   } catch (e) {
     console.error(e);
-    settingsError.value = 'Fout bij ophalen instellingen.';
+    settingsError.value = e.message || 'Fout bij ophalen instellingen.';
   }
 }
 
@@ -345,27 +394,29 @@ async function saveSettings() {
   settingsError.value = '';
 
   try {
-    // Verstuur enkel de relevante velden
     const payload = {
       ratePerKm: Number(settings.value.ratePerKm ?? 0),
       deadlineDayNextMonth: Number(settings.value.deadlineDayNextMonth ?? 12),
       capType: settings.value.capType ?? 'NONE',
-      monthlyCapAmount: settings.value.capType === 'MONTHLY'
+
+      monthlyCapAmount: ['MONTHLY', 'BOTH'].includes(settings.value.capType)
         ? Number(settings.value.monthlyCapAmount ?? 0)
         : null,
-      yearlyCapAmount: settings.value.capType === 'YEARLY'
+
+      yearlyCapAmount: ['YEARLY', 'BOTH'].includes(settings.value.capType)
         ? Number(settings.value.yearlyCapAmount ?? 0)
         : null,
-      beBlockAfterCap: selectedCountry.value === 'BE' ? !!settings.value.beBlockAfterCap : false,
+
+      beBlockAfterCap: selectedCountry.value === 'BE'
+        ? !!settings.value.beBlockAfterCap
+        : false,
+
       exportDayOfMonth: Number(settings.value.exportDayOfMonth ?? 1),
     };
 
     const res = await fetch(`${API}/settings/${selectedCountry.value}`, {
       method: 'PUT',
-      headers: {
-        ...userStore.authHeaders,
-        'Content-Type': 'application/json',
-      },
+      headers: userStore.getAuthHeaders(true), // ✅ PUT JSON
       body: JSON.stringify(payload),
     });
 
@@ -391,7 +442,7 @@ async function triggerExport() {
   try {
     const res = await fetch(`${API}/exports/trigger?month=${exportMonth.value}`, {
       method: 'POST',
-      headers: userStore.authHeaders,
+      headers: userStore.getAuthHeaders(false), // ✅ POST zonder body => geen JSON nodig
     });
 
     if (res.ok) {
@@ -413,258 +464,3 @@ onMounted(async () => {
   await fetchSettings();
 });
 </script>
-
-<style scoped>
-/* Modern Dashboard Styles */
-.header-section {
-  margin-bottom: 2rem;
-}
-
-.subtitle {
-  color: var(--text-secondary);
-  font-size: 1.1rem;
-}
-
-/* User Avatar Cell */
-.user-cell {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.avatar-circle {
-  width: 40px;
-  height: 40px;
-  background: var(--primary);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 1.2rem;
-}
-
-.user-name {
-  display: block;
-  font-size: 1rem;
-  color: var(--text-primary);
-}
-
-.user-email {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-/* Badges & Flags */
-.country-badge {
-  display: inline-flex;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-.be-flag { background: #EBF8FF; color: #2C5282; border: 1px solid #BEE3F8; }
-.nl-flag { background: #FFF5F5; color: #C53030; border: 1px solid #FED7D7; }
-
-/* Inputs with Units */
-.input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-sm {
-  width: 100px;
-  padding-right: 2.5rem;
-  text-align: right;
-  font-family: 'Roboto Mono', monospace;
-}
-
-.unit {
-  position: absolute;
-  right: 10px;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  pointer-events: none;
-}
-
-.bike-select {
-  width: 100%;
-  min-width: 160px;
-}
-
-/* Settings Card Styling */
-.settings-card {
-  background: white;
-  height: fit-content;
-}
-
-.settings-form {
-  display: grid;
-  gap: 1.5rem;
-}
-
-.input-group {
-  display: flex;
-  align-items: center;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--surface);
-  transition: all 0.2s;
-}
-
-.input-group:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(47, 133, 90, 0.1);
-}
-
-.prefix {
-  padding: 0 1rem;
-  color: var(--text-secondary);
-  background: var(--background);
-  border-right: 1px solid var(--border-color);
-  height: 100%;
-  display: flex;
-  align-items: center;
-}
-
-.input-group input {
-  border: none;
-  width: 100%;
-  padding: 0.75rem;
-}
-
-.input-group input:focus {
-  box-shadow: none;
-}
-
-/* Toggle Switch */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 50px;
-  height: 26px;
-}
-
-.switch input { 
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  transition: .4s;
-  border-radius: 34px;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 4px;
-  bottom: 3px;
-  background-color: white;
-  transition: .4s;
-  border-radius: 50%;
-}
-
-input:checked + .slider {
-  background-color: var(--primary);
-}
-
-input:checked + .slider:before {
-  transform: translateX(23px);
-}
-
-.checkbox-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: var(--background);
-  border-radius: 8px;
-}
-
-.switch-label {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.full-width-btn {
-  width: 100%;
-  margin-top: 1rem;
-  padding: 1rem;
-  font-size: 1rem;
-}
-
-/* Export Card */
-.export-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.export-box {
-  background: var(--background);
-  padding: 1.5rem;
-  border-radius: 12px;
-  margin: 1.5rem 0;
-  border: 1px dashed var(--border-color);
-}
-
-.export-btn {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1rem;
-  font-size: 1.1rem;
-  margin-top: 1rem;
-}
-
-.info-box {
-  background: #EBF8FF;
-  padding: 1rem;
-  border-radius: 6px;
-  color: #2C5282;
-  font-size: 0.9rem;
-}
-
-.form-row {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 0px;
-}
-
-.form-group.half {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Transitions */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.5s;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>

@@ -3,7 +3,7 @@ const userService = require("../services/userService");
 
 module.exports = async (req, res, next) => {
   try {
-    // Demo endpoints zijn publiek bereikbaar (maar demoController kan DEMO_MODE afdwingen)
+    // Demo endpoints zijn publiek bereikbaar
     if (req.path.startsWith("/demo")) return next();
 
     const raw = req.header("x-demo-user-id");
@@ -14,6 +14,7 @@ module.exports = async (req, res, next) => {
       return res.status(400).json({ error: "INVALID_DEMO_USER_ID" });
     }
 
+    // userService.getUserById include profile
     const user = await userService.getUserById(userId);
     if (!user) return res.status(401).json({ error: "UNKNOWN_USER" });
 

@@ -31,11 +31,13 @@ exports.updateEmployeeProfile = async (id, data) => {
     create: { userId: id, fullCommuteKm, partialCommuteKm }
   });
 
-  // 3. Update bikeType (NL user)
-  await prisma.user.update({
-    where: { id },
-    data: { bikeType }
-  });
+  // 3. Update bikeType enkel voor NL
+  if (user.country === 'NL' && bikeType) {
+    await prisma.user.update({
+      where: { id },
+      data: { bikeType }
+    });
+  }
 
   return prisma.user.findUnique({ where: { id }, include: { profile: true } });
 };

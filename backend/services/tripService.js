@@ -162,4 +162,21 @@ async function listTripsForMonth(userId, yearMonth) {
   });
 }
 
-module.exports = { createTripEntry, deleteTripEntry, listTripsForMonth };
+async function getAvailableMonthsForUser(userId) {
+  const months = await prisma.tripEntry.findMany({
+    where: { userId },
+    select: { date: true },
+    orderBy: { date: 'desc' }
+  });
+  const uniqueMonths = [
+    ...new Set(months.map(t => t.date.slice(0, 7)))
+  ];
+  return uniqueMonths;
+}
+
+module.exports = { 
+  createTripEntry, 
+  deleteTripEntry, 
+  listTripsForMonth, 
+  getAvailableMonthsForUser 
+};

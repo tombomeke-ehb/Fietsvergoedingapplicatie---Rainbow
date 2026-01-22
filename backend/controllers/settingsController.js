@@ -3,9 +3,12 @@ const settingsService = require("../services/settingsService");
 
 exports.getSettings = async (req, res) => {
   try {
-    if (req.user.role !== "ADMIN") return res.status(403).json({ error: "FORBIDDEN" });
+    const country = (req.params.country || "").toUpperCase();
 
-    const country = req.params.country;
+    if (!["BE", "NL"].includes(country)) {
+      return res.status(400).json({ error: "INVALID_COUNTRY" });
+    }
+
     const settings = await settingsService.getSettingsByCountry(country);
     res.json(settings);
   } catch (err) {
@@ -17,7 +20,13 @@ exports.updateSettings = async (req, res) => {
   try {
     if (req.user.role !== "ADMIN") return res.status(403).json({ error: "FORBIDDEN" });
 
-    const country = req.params.country;
+    const country = (req.params.country || "").toUpperCase();
+
+
+    if (!["BE", "NL"].includes(country)) {
+      return res.status(400).json({ error: "INVALID_COUNTRY" });
+    }
+
     const updated = await settingsService.updateSettings(country, req.body);
     res.json(updated);
   } catch (err) {

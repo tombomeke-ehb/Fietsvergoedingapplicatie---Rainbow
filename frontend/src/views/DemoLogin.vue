@@ -45,19 +45,45 @@
         </button>
       </div>
 
+      <div class="card" v-if="users.length">
+        <h2>Alle gebruikers</h2>
+        <div class="user-list">
+          <button v-for="u in users" :key="u.id" @click="handleLogin(u.id)" class="user-btn">
+            <span class="user-avatar">{{ u.name.charAt(0) }}</span>
+            <span class="user-name">{{ u.name }}</span>
+            <span class="user-role">{{ u.role }}</span>
+            <span class="user-country">{{ u.country }}</span>
+          </button>
+        </div>
+      </div>
+
       <p v-if="error" class="error-msg">⚠️ {{ error }}</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "../store";
 
 const router = useRouter();
 const userStore = useUserStore();
 const error = ref("");
+const users = ref([]);
+
+async function fetchDemoUsers() {
+  try {
+    const res = await fetch("http://localhost:3001/employees", {
+      headers: userStore.getAuthHeaders(false)
+    });
+    if (!res.ok) return;
+    users.value = await res.json();
+  } catch (e) {
+    // fallback: geen users
+    users.value = [];
+  }
+}
 
 async function handleLogin(id) {
   error.value = '';
@@ -76,9 +102,7 @@ async function handleLogin(id) {
   }
 }
 
-
- 
-
+onMounted(fetchDemoUsers);
 </script>
 
 <style scoped>
@@ -225,5 +249,58 @@ p {
   background: #fff5f5;
   padding: 0.75rem;
   border-radius: 8px;
+}
+
+.user-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.user-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.2s;
+}
+
+.user-btn:hover {
+  background: #e6fcf5;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e6fffa;
+  color: #2f855a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.user-name {
+  font-weight: 600;
+}
+
+.user-role {
+  font-size: 0.9rem;
+  color: #4a5568;
+  margin-left: 0.5rem;
+}
+
+.user-country {
+  font-size: 0.9rem;
+  color: #718096;
+  margin-left: 0.5rem;
 }
 </style>

@@ -8,10 +8,11 @@
       
       <div class="month-filter">
         <label>Periode</label>
-        <div class="filter-input-wrapper">
-          <span class="calendar-icon">📅</span>
-          <input type="month" v-model="selectedMonth" @change="fetchExports" class="filter-input" />
-        </div>
+        <select v-model="selectedMonth" @change="fetchExports" class="filter-input">
+          <option v-for="m in monthOptions" :key="m.value" :value="m.value">
+            {{ m.label }}
+          </option>
+        </select>
       </div>
     </header>
     
@@ -51,7 +52,7 @@
       <div class="card-header no-border">
         <h2>📑 Detailoverzicht</h2>
         <div class="actions">
-          <button @click="downloadAllCsv" v-if="exports.length" class="btn-secondary btn-sm" disabled title="Nog niet geïmplementeerd">
+          <button @click="downloadAllCsv" v-if="exports.length" class="btn-secondary btn-sm" title="Nog niet geïmplementeerd">
             📥 Alles downloaden
           </button>
         </div>
@@ -122,16 +123,37 @@ import { useUserStore } from '../store';
 
 const API = 'http://localhost:3001';
 const userStore = useUserStore();
-const selectedMonth = ref(new Date().toISOString().slice(0, 7));
+const selectedMonth = ref('');
+const monthOptions = ref([]);
 const exports = ref([]);
 
-// Computed
+async function fetchAvailableExportMonths() {
+  try {
+    const res = await fetch(`${API}/exports/months`, {
+      headers: userStore.getAuthHeaders(false)
+    });
+    if (!res.ok) return;
+    const months = await res.json();
+    monthOptions.value = months.map((value) => {
+      const [y, m] = value.split('-').map(Number);
+      const d = new Date(y, m - 1, 1);
+      const label = d.toLocaleString('nl-BE', { month: 'long', year: 'numeric' });
+      return { value, label };
+    });
+    if (monthOptions.value.length) {
+      selectedMonth.value = monthOptions.value[0].value;
+    }
+  } catch (e) {
+    // fallback: geen maanden
+    monthOptions.value = [];
+  }
+}
+
 const totalKm = computed(() => exports.value.reduce((sum, exp) => sum + exp.totalKm, 0));
 const totalAmount = computed(() => exports.value.reduce((sum, exp) => sum + exp.totalAmount, 0));
 const totalTaxFree = computed(() => exports.value.reduce((sum, exp) => sum + (exp.totalTaxFreeAmount || 0), 0));
 const totalTaxed = computed(() => exports.value.reduce((sum, exp) => sum + (exp.totalTaxedAmount || 0), 0));
 
-// Methods
 function getStatusClass(status) {
   const classes = {
     'READY': 'status-ready',
@@ -153,12 +175,17 @@ function getStatusText(status) {
 }
 
 async function fetchExports() {
+  if (!selectedMonth.value) return;
   try {
-    const res = await fetch(`${API}/exports?month=${selectedMonth.value}`, { 
-      headers: userStore.authHeaders 
+    const res = await fetch(`${API}/exports?month=${selectedMonth.value}`, {
+      headers: userStore.getAuthHeaders(false)
     });
+
     if (res.ok) {
       exports.value = await res.json();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      console.warn('exports fetch failed:', data);
     }
   } catch (e) {
     console.error('Error fetching exports:', e);
@@ -166,7 +193,10 @@ async function fetchExports() {
 }
 
 async function downloadCsv(id) {
-  const res = await fetch(`${API}/exports/${id}/download`, { headers: userStore.authHeaders });
+  const res = await fetch(`${API}/exports/${id}/download`, {
+    headers: userStore.getAuthHeaders(false)
+  });
+
   if (res.ok) {
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
@@ -176,16 +206,34 @@ async function downloadCsv(id) {
     a.download = `export_${id}.csv`;
     a.click();
 
-    // netjes opruimen
     window.URL.revokeObjectURL(url);
   } else {
     alert("Download mislukt");
   }
 }
 
+async function downloadAllCsv() {
+  if (!selectedMonth.value) return;
+  const res = await fetch(`${API}/exports/download-all?month=${selectedMonth.value}`, {
+    headers: userStore.getAuthHeaders(false)
+  });
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `export_${selectedMonth.value}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } else {
+    alert("Download mislukt");
+  }
+}
 
-onMounted(() => {
-  userStore.fetchMe().then(fetchExports);
+onMounted(async () => {
+  await userStore.fetchMe();
+  await fetchAvailableExportMonths();
+  await fetchExports();
 });
 </script>
 

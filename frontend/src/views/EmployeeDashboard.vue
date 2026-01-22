@@ -1,6 +1,5 @@
 <template>
   <div class="main-content">
-    
     <header class="dashboard-header">
       <div class="welcome-section">
         <h1 class="greeting">👋 Hallo, {{ userStore.user?.name }}</h1>
@@ -10,7 +9,7 @@
         ✓ Profiel Actief
       </div>
     </header>
-    
+
     <div v-if="!profileLoaded" class="loading-state">
       <div class="spinner"></div>
       <p>Profielgegevens ophalen...</p>
@@ -25,59 +24,59 @@
     </div>
 
     <div v-else class="dashboard-layout">
-      
-      <!-- Left Column: Actions & Info -->
       <div class="dashboard-sidebar">
-        <!-- Stats Card -->
         <div class="card profile-card">
           <div class="card-header-clean">
             <h2>📍 Mijn Traject</h2>
           </div>
           <div class="stats-grid-vertical">
-             <div class="stat-row">
-               <div class="stat-icon">🏠</div>
-               <div class="stat-details">
-                 <small>Volledig Woon-Werk</small>
-                 <strong>{{ userStore.user?.profile?.fullCommuteKm || 0 }} km</strong>
-               </div>
-             </div>
-             <div class="stat-row">
-               <div class="stat-icon">🚲</div>
-               <div class="stat-details">
-                 <small>Gedeeltelijk Traject</small>
-                 <strong>{{ userStore.user?.profile?.partialCommuteKm || 0 }} km</strong>
-               </div>
-             </div>
-             <div class="stat-row">
-               <div class="stat-icon">💰</div>
-               <div class="stat-details">
-                 <small>Vergoeding Tarief</small>
-                 <strong>{{ userStore.user?.country === 'BE' ? '€ 0.35/km' : '€ 0.23/km' }}</strong>
-               </div>
-             </div>
-             <div v-if="userStore.user?.country === 'NL'" class="stat-row">
-               <div class="stat-icon">🚴‍♂️</div>
-               <div class="stat-details">
-                 <small>Type Fiets</small>
-                 <span :class="['badge', userStore.user?.bikeType === 'OWN' ? 'badge-green' : 'badge-yellow']">
-                   {{ userStore.user?.bikeType === 'OWN' ? 'Eigen (Onbelast)' : 'Bedrijfs (Belast)' }}
-                 </span>
-               </div>
-             </div>
+            <div class="stat-row">
+              <div class="stat-icon">🏠</div>
+              <div class="stat-details">
+                <small>Volledig Woon-Werk</small>
+                <strong>{{ userStore.user?.profile?.fullCommuteKm || 0 }} km</strong>
+              </div>
+            </div>
+
+            <div class="stat-row">
+              <div class="stat-icon">🚲</div>
+              <div class="stat-details">
+                <small>Gedeeltelijk Traject</small>
+                <strong>{{ userStore.user?.profile?.partialCommuteKm || 0 }} km</strong>
+              </div>
+            </div>
+
+            <div class="stat-row">
+              <div class="stat-icon">💰</div>
+              <div class="stat-details">
+                <small>Vergoeding Tarief</small>
+                <strong>€ {{ (countrySettings?.ratePerKm ?? 0).toFixed(2) }}/km</strong>
+              </div>
+            </div>
+
+            <div v-if="userStore.user?.country === 'NL'" class="stat-row">
+              <div class="stat-icon">🚴‍♂️</div>
+              <div class="stat-details">
+                <small>Type Fiets</small>
+                <span :class="['badge', userStore.user?.bikeType === 'OWN' ? 'badge-green' : 'badge-yellow']">
+                  {{ userStore.user?.bikeType === 'OWN' ? 'Eigen (Onbelast)' : 'Bedrijfs (Belast)' }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Action Card -->
         <div class="card action-card">
           <div class="card-header-clean">
             <h2>📝 Nieuwe Rit</h2>
           </div>
+
           <form @submit.prevent="submitTrip" class="trip-form-vertical">
             <div class="form-group">
               <label>Datum van rit</label>
               <input type="date" v-model="date" required class="large-input" />
             </div>
-            
+
             <div class="form-group">
               <label>Type Verplaatsing</label>
               <div class="radio-group-vertical">
@@ -89,7 +88,7 @@
                   </div>
                   <div class="radio-check" v-if="tripType === 'FULL'">✓</div>
                 </label>
-                
+
                 <label :class="['radio-card', tripType === 'PARTIAL' ? 'selected' : '']">
                   <input type="radio" v-model="tripType" value="PARTIAL" />
                   <div class="radio-content">
@@ -105,47 +104,68 @@
               {{ submitting ? 'Even geduld...' : '✅ Rit Registreren' }}
             </button>
           </form>
-          
+
           <transition name="slide-fade">
-             <div v-if="error" class="msg-box error-box">
-               <span class="icon">🛑</span> {{ error }}
-             </div>
+            <div v-if="error" class="msg-box error-box">
+              <span class="icon">🛑</span> {{ error }}
+            </div>
           </transition>
           <transition name="slide-fade">
-             <div v-if="success" class="msg-box success-box">
-               <span class="icon">🎉</span> Rit succesvol opgeslagen!
-             </div>
+            <div v-if="success" class="msg-box success-box">
+              <span class="icon">🎉</span> Rit succesvol opgeslagen!
+            </div>
           </transition>
         </div>
       </div>
 
-      <!-- Main Content: History -->
       <div class="dashboard-main">
         <div class="card history-card">
           <div class="list-header">
             <div class="header-left">
               <h2>📅 Mijn Ritten</h2>
-              <span class="badge badge-gray">{{ trips.length }} ritten</span>
+              <span class="badge badge-gray">{{ filteredTrips.length }} ritten</span>
             </div>
-            <div class="month-selector-wrapper">
-              <input type="month" v-model="selectedMonth" @change="fetchTrips" class="month-input-styled" />
+
+            <div class="header-controls">
+              <select v-model="selectedMonth" @change="fetchTrips" class="month-input-styled">
+                <option v-for="m in monthOptions" :key="m.value" :value="m.value">
+                  {{ m.label }}
+                </option>
+              </select>
+
+              <select v-model="filterTripType" class="month-input-styled">
+                <option value="ALL">Alle types</option>
+                <option value="FULL">Volledig</option>
+                <option value="PARTIAL">Deels</option>
+              </select>
+
+              <select v-model="filterFiscal" class="month-input-styled">
+                <option value="ALL">Alle statussen</option>
+                <option value="TAX_FREE">Onbelast</option>
+                <option value="TAXED">Belast</option>
+              </select>
+
+              <select v-model="sortMode" class="month-input-styled">
+                <option value="DATE_ASC">Datum (oud → nieuw)</option>
+                <option value="DATE_DESC">Datum (nieuw → oud)</option>
+                <option value="AMOUNT_DESC">Bedrag (hoog → laag)</option>
+              </select>
             </div>
           </div>
-          
-          <!-- Summary Header -->
+
           <div class="summary-header">
-             <div class="summary-item">
-               <span>Totaal Afstand</span>
-               <span class="summary-value">{{ trips.reduce((s,t) => s + t.kmSnapshot, 0).toFixed(1) }} km</span>
-             </div>
-             <div class="summary-item highlight">
-               <span>Totaal Vergoeding</span>
-               <span class="summary-value">€ {{ totalAmount.toFixed(2) }}</span>
-             </div>
+            <div class="summary-item">
+              <span>Totaal Afstand</span>
+              <span class="summary-value">{{ totalKmFiltered.toFixed(1) }} km</span>
+            </div>
+            <div class="summary-item highlight">
+              <span>Totaal Vergoeding</span>
+              <span class="summary-value">€ {{ totalAmountFiltered.toFixed(2) }}</span>
+            </div>
           </div>
 
           <div class="table-wrapper stylish-table">
-            <table v-if="trips.length">
+            <table v-if="filteredTrips.length">
               <thead>
                 <tr>
                   <th>Datum</th>
@@ -157,7 +177,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="t in trips" :key="t.id" class="trip-row">
+                <tr v-for="t in filteredTrips" :key="t.id" class="trip-row">
                   <td>
                     <div class="date-cell">
                       <span class="day">{{ new Date(t.date).getDate() }}</span>
@@ -184,15 +204,15 @@
                 </tr>
               </tbody>
             </table>
+
             <div v-else class="empty-state-modern">
-               <div class="empty-illustration">📅</div>
-               <h3>Geen ritten gevonden</h3>
-               <p>Selecteer een andere maand of registreer je eerste rit.</p>
+              <div class="empty-illustration">📅</div>
+              <h3>Geen ritten gevonden</h3>
+              <p>Selecteer een andere maand of pas je filters aan.</p>
             </div>
           </div>
         </div>
       </div>
-
     </div>
   </div>
 </template>
@@ -204,7 +224,6 @@ import { useUserStore } from '../store';
 const API = 'http://localhost:3001';
 const userStore = useUserStore();
 
-// State
 const date = ref(new Date().toISOString().slice(0, 10));
 const tripType = ref('FULL');
 const trips = ref([]);
@@ -216,43 +235,113 @@ const submitting = ref(false);
 const error = ref('');
 const success = ref(false);
 
-// Settings voor het land van de employee (ratePerKm, deadline, caps, …)
 const countrySettings = ref(null);
 
-// Computed
-const totalAmount = computed(() => trips.value.reduce((sum, t) => sum + t.amountSnapshot, 0));
+const monthOptions = ref([]); // [{ value: "2026-01", label: "januari 2026" }, ...]
+
+async function fetchAvailableMonths() {
+  try {
+    const res = await fetch(`${API}/trip-entries/months`, {
+      headers: userStore.getAuthHeaders(false),
+    });
+
+    if (!res.ok) return;
+
+    const months = await res.json(); // ["2026-01","2025-12",...]
+
+    // Maak labels
+    monthOptions.value = months.map((value) => {
+      const [y, m] = value.split('-').map(Number);
+      const d = new Date(y, m - 1, 1);
+      const label = d.toLocaleString('nl-BE', { month: 'long', year: 'numeric' });
+      return { value, label };
+    });
+
+    // Kies default: als selectedMonth niet in lijst zit -> pak eerste
+    if (monthOptions.value.length) {
+      const exists = monthOptions.value.some(o => o.value === selectedMonth.value);
+      if (!exists) selectedMonth.value = monthOptions.value[0].value;
+    }
+  } catch (e) {
+    console.error('Fetch months error', e);
+  }
+}
+
+const filterTripType = ref('ALL');
+const filterFiscal = ref('ALL');
+const sortMode = ref('DATE_ASC');
+
+const filteredTrips = computed(() => {
+  let list = [...trips.value];
+
+  if (filterTripType.value !== 'ALL') {
+    list = list.filter(t => t.tripType === filterTripType.value);
+  }
+
+  if (filterFiscal.value !== 'ALL') {
+    list = list.filter(t => t.fiscalStatusSnapshot === filterFiscal.value);
+  }
+
+  if (sortMode.value === 'DATE_ASC') {
+    list.sort((a, b) => a.date.localeCompare(b.date) || a.sequence - b.sequence);
+  } else if (sortMode.value === 'DATE_DESC') {
+    list.sort((a, b) => b.date.localeCompare(a.date) || b.sequence - a.sequence);
+  } else if (sortMode.value === 'AMOUNT_DESC') {
+    list.sort((a, b) => (b.amountSnapshot - a.amountSnapshot) || b.date.localeCompare(a.date));
+  }
+
+  return list;
+});
+
+const totalAmountFiltered = computed(() =>
+  filteredTrips.value.reduce((sum, t) => sum + t.amountSnapshot, 0)
+);
+
+const totalKmFiltered = computed(() =>
+  filteredTrips.value.reduce((sum, t) => sum + t.kmSnapshot, 0)
+);
 
 async function fetchSettingsForMe() {
   if (!userStore.user?.country) return;
+
   try {
-    const res = await fetch(`${API}/settings/${userStore.user.country}`, { headers: userStore.authHeaders });
+    const res = await fetch(`${API}/settings/${userStore.user.country}`, {
+      headers: userStore.getAuthHeaders(false),
+    });
+
     if (res.ok) {
       countrySettings.value = await res.json();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      console.warn('settings fetch failed:', data);
     }
   } catch (e) {
-    console.error("Fetch settings error", e);
+    console.error('Fetch settings error', e);
   }
 }
 
 async function init() {
   await userStore.fetchMe();
 
-  // Profile check: zonder stamgegevens kan je geen km bepalen
   hasProfile.value = !!userStore.user?.profile;
   profileLoaded.value = true;
 
   await fetchSettingsForMe();
+  await fetchAvailableMonths();
   await fetchTrips();
 }
 
 async function fetchTrips() {
   try {
-    const res = await fetch(`${API}/trip-entries?month=${selectedMonth.value}`, { headers: userStore.authHeaders });
+    const res = await fetch(`${API}/trip-entries?month=${selectedMonth.value}`, {
+      headers: userStore.getAuthHeaders(false),
+    });
+
     if (res.ok) {
       trips.value = await res.json();
     }
   } catch (e) {
-    console.error("Fetch trips error", e);
+    console.error('Fetch trips error', e);
   }
 }
 
@@ -264,61 +353,75 @@ async function submitTrip() {
   try {
     const res = await fetch(`${API}/trip-entries`, {
       method: 'POST',
-      headers: userStore.authHeaders,
-      body: JSON.stringify({ date: date.value, tripType: tripType.value })
+      headers: userStore.getAuthHeaders(true),
+      body: JSON.stringify({ date: date.value, tripType: tripType.value }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      // Backend errors naar duidelijke NL boodschap
-      if (data.error === 'CAP_REACHED_BE_BLOCK') error.value = "⛔ Limiet bereikt (BE plafond). Registratie geblokkeerd.";
-      else if (data.error === 'MAX_2_PER_DAY') error.value = "⛔ Maximaal 2 ritten per dag toegestaan.";
-      else if (data.error === 'DEADLINE_PASSED') error.value = "⛔ Deadline voor deze maand is verstreken.";
-      else if (data.error === 'NO_PROFILE') error.value = "⛔ Profiel ontbreekt: vraag admin om stamgegevens in te vullen.";
-      else error.value = data.error || "Er is een fout opgetreden.";
+      if (data.error === 'CAP_REACHED_BE_BLOCK') error.value = 'Limiet bereikt (BE plafond). Registratie geblokkeerd.';
+      else if (data.error === 'MAX_2_PER_DAY') error.value = 'Maximaal 2 ritten per dag toegestaan.';
+      else if (data.error === 'DEADLINE_PASSED') error.value = 'Deadline voor deze maand is verstreken.';
+      else if (data.error === 'NO_PROFILE') error.value = 'Profiel ontbreekt: vraag admin om stamgegevens in te vullen.';
+      else error.value = data.error || 'Er is een fout opgetreden.';
     } else {
       success.value = true;
+
+      await fetchAvailableMonths();
+
       await fetchTrips();
 
-      // success message automatisch terug weg
       setTimeout(() => (success.value = false), 2500);
     }
   } catch (e) {
-    error.value = "Netwerkfout: Kan server niet bereiken.";
+    error.value = 'Netwerkfout: Kan server niet bereiken.';
   } finally {
     submitting.value = false;
   }
 }
 
+
 async function deleteTrip(id) {
-  if (!confirm("Weet je zeker dat je deze rit wilt verwijderen?")) return;
+  if (!confirm('Weet je zeker dat je deze rit wilt verwijderen?')) return;
 
   try {
     const res = await fetch(`${API}/trip-entries/${id}`, {
       method: 'DELETE',
-      headers: userStore.authHeaders
+      headers: userStore.getAuthHeaders(false),
     });
 
     if (res.ok) {
+      // ✅ trips herladen
       await fetchTrips();
+
+      // ✅ maanden herladen (maand kan leeg geworden zijn)
+      await fetchAvailableMonths();
+
+      // ✅ als selectedMonth niet meer in dropdown bestaat: spring naar eerste maand en reload
+      const exists = monthOptions.value.some(o => o.value === selectedMonth.value);
+      if (!exists && monthOptions.value.length) {
+        selectedMonth.value = monthOptions.value[0].value;
+        await fetchTrips();
+      }
     } else {
-      const data = await res.json();
-      alert(data.error === 'DEADLINE_PASSED'
-        ? "Kan niet verwijderen: deadline verstreken."
-        : "Kon rit niet verwijderen."
+      const data = await res.json().catch(() => ({}));
+      alert(
+        data.error === 'DEADLINE_PASSED'
+          ? 'Kan niet verwijderen: deadline verstreken.'
+          : (data.error || 'Kon rit niet verwijderen.')
       );
     }
   } catch (e) {
-    alert("Netwerkfout bij verwijderen.");
+    alert('Netwerkfout bij verwijderen.');
   }
 }
+
 
 onMounted(init);
 </script>
 
 <style scoped>
-/* Layout Grid */
 .dashboard-layout {
   display: grid;
   grid-template-columns: 350px 1fr;
@@ -331,7 +434,6 @@ onMounted(init);
   }
 }
 
-/* Sidebar Styles */
 .dashboard-sidebar {
   display: flex;
   flex-direction: column;
@@ -397,7 +499,6 @@ onMounted(init);
   color: var(--text-primary);
 }
 
-/* Form Styles */
 .trip-form-vertical {
   display: flex;
   flex-direction: column;
@@ -490,18 +591,26 @@ onMounted(init);
   border: 1px solid #FEB2B2;
 }
 
-/* History & Table Styles */
 .list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+  gap: 1rem;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.header-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .badge-gray {
@@ -576,8 +685,15 @@ onMounted(init);
   font-family: 'Roboto Mono', monospace;
 }
 
-.day { font-size: 1.1rem; font-weight: bold; }
-.month { font-size: 0.7rem; text-transform: uppercase; }
+.day {
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.month {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
 
 .type-cell {
   display: flex;
@@ -591,8 +707,16 @@ onMounted(init);
   font-size: 0.75rem;
   font-weight: 600;
 }
-.pill-success { background: #E6FFFA; color: #38A169; }
-.pill-warning { background: #FFFAF0; color: #DD6B20; }
+
+.pill-success {
+  background: #E6FFFA;
+  color: #38A169;
+}
+
+.pill-warning {
+  background: #FFFAF0;
+  color: #DD6B20;
+}
 
 .delete-btn {
   opacity: 0.4;
@@ -617,10 +741,10 @@ onMounted(init);
   opacity: 0.5;
 }
 
-/* Animations */
 .slide-fade-enter-active {
   transition: all 0.3s ease-out;
 }
+
 .slide-fade-enter-from,
 .slide-fade-leave-to {
   transform: translateY(-10px);

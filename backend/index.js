@@ -11,6 +11,8 @@ const tripRoutes = require("./routes/tripRoutes");
 const exportRoutes = require("./routes/exportRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const exportMonthRoutes = require('./routes/exportMonthRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -41,8 +43,10 @@ app.use(authMiddleware);
 // Kern routes (zoals in je analyse)
 app.use("/trip-entries", tripRoutes);
 app.use("/exports", exportRoutes);
+app.use('/exports', exportMonthRoutes);
 app.use("/settings", settingsRoutes);
 app.use("/employees", employeeRoutes);
+app.use("/admin", adminRoutes);
 
 // Handig endpoint voor de frontend om “wie ben ik?” te tonen
 app.get("/me", (req, res) => {
@@ -52,6 +56,7 @@ app.get("/me", (req, res) => {
     role: req.user.role,
     country: req.user.country,
     bikeType: req.user.bikeType,
+    profile: req.user.profile,
   });
 });
 

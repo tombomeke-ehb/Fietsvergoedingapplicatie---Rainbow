@@ -12,4 +12,6 @@ router.get("/", tripController.listTrips);
 // DELETE /trip-entries/:id
 router.delete("/:id", tripController.deleteTrip);
 
+router.get('/months', tripController.getAvailableMonths);
+
 module.exports = router;
