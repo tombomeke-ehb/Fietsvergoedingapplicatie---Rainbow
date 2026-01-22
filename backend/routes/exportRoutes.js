@@ -5,5 +5,6 @@ const exportController = require("../controllers/exportController");
 
 router.post("/trigger", exportController.trigger);
 router.get("/", exportController.list);
+router.get("/:id/download", exportController.download);
 
 module.exports = router;
