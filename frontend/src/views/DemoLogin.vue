@@ -36,15 +36,19 @@ const error = ref('');
 
 async function handleLogin(id) {
   error.value = '';
-  await userStore.login(id);
-  
-  if (userStore.user) {
+
+  const result = await userStore.login(id);
+
+  if (result.ok && userStore.user) {
     const role = userStore.user.role;
     if (role === 'EMPLOYEE') router.push('/employee');
     else if (role === 'ADMIN') router.push('/admin');
     else router.push('/payroll');
   } else {
-    error.value = "Kan niet inloggen. Backend offline?";
+    if (result?.error === 'DEMO_MODE_DISABLED') error.value = "Demo mode staat uit op de backend.";
+    else if (result?.error === 'NETWORK_ERROR') error.value = "Kan backend niet bereiken.";
+    else error.value = "Kan niet inloggen.";
   }
 }
+
 </script>
