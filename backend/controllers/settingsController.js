@@ -1,21 +1,26 @@
-const settingsService = require('../services/settingsService');
+// backend/controllers/settingsController.js
+const settingsService = require("../services/settingsService");
 
 exports.getSettings = async (req, res) => {
   try {
-    if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'FORBIDDEN' });
-    const settings = await settingsService.getSettingsByCountry(req.params.country);
+    if (req.user.role !== "ADMIN") return res.status(403).json({ error: "FORBIDDEN" });
+
+    const country = req.params.country;
+    const settings = await settingsService.getSettingsByCountry(country);
     res.json(settings);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message || 'SETTINGS_ERROR' });
+    res.status(err.status || 500).json({ error: err.message || "SETTINGS_ERROR" });
   }
 };
 
 exports.updateSettings = async (req, res) => {
   try {
-    if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'FORBIDDEN' });
-    const updated = await settingsService.updateSettings(req.params.country, req.body);
+    if (req.user.role !== "ADMIN") return res.status(403).json({ error: "FORBIDDEN" });
+
+    const country = req.params.country;
+    const updated = await settingsService.updateSettings(country, req.body);
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: 'SETTINGS_UPDATE_ERROR' });
+    res.status(err.status || 500).json({ error: err.message || "SETTINGS_UPDATE_ERROR" });
   }
 };
