@@ -62,14 +62,19 @@ async function downloadCsv(id) {
   if (res.ok) {
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
+
     const a = document.createElement('a');
     a.href = url;
     a.download = `export_${id}.csv`;
     a.click();
+
+    // netjes opruimen
+    window.URL.revokeObjectURL(url);
   } else {
     alert("Download mislukt");
   }
 }
+
 
 onMounted(() => {
   userStore.fetchMe().then(fetchExports);
