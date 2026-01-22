@@ -1,194 +1,236 @@
-<!-- frontend/src/views/EmployeeDashboard.vue -->
 <template>
-  <div class="page">
-    <h1>Werknemer Dashboard</h1>
-    <div v-if="profileError" class="error">{{ profileError }}</div>
+  <div>
+    <h1>👋 Welkom, {{ userStore.user?.name }}</h1>
+    
+    <div v-if="!profileLoaded">Profiel laden...</div>
+
+    <div v-else-if="!hasProfile" class="alert-warning">
+      <h3>⚠️ Profiel incompleet</h3>
+      <p>Je werkgever heeft je traject (Verklaring op Eer) nog niet ingesteld. Registratie is tijdelijk geblokkeerd.</p>
+    </div>
+
     <div v-else>
-      <div v-if="!profileLoaded">
-        <p>Profiel laden...</p>
-      </div>
-      <div v-else-if="!hasProfile">
-        <div class="card">
-          <h2>Geen profiel</h2>
-          <p>Wacht op activatie door admin. Je kan nog niet registreren.</p>
+      <div class="card" style="background: #f8fafc; border-left: 4px solid #3b82f6;">
+        <h2>Mijn Trajectgegevens</h2>
+        <div class="stats-grid">
+           <div class="stat-item">
+             <small>Volledig traject</small>
+             <strong>{{ userStore.user?.profile?.fullCommuteKm || 0 }} km</strong>
+           </div>
+           <div class="stat-item">
+             <small>Gedeeltelijk traject</small>
+             <strong>{{ userStore.user?.profile?.partialCommuteKm || 0 }} km</strong>
+           </div>
+           <div class="stat-item">
+             <small>Vergoeding (geschat)</small>
+             <strong>{{ userStore.user?.country === 'BE' ? '€ 0.30/km' : '€ 0.23/km' }}</strong>
+           </div>
+           <div v-if="userStore.user?.country === 'NL'" class="stat-item">
+             <small>Type Fiets</small>
+             <strong>{{ userStore.user?.bikeType === 'OWN' ? 'Eigen (Onbelast)' : 'Bedrijfs (Belast)' }}</strong>
+           </div>
         </div>
       </div>
-      <div v-else>
-        <div class="card">
-          <h2>Nieuwe registratie</h2>
-          <form @submit.prevent="submitTrip">
-            <label>
-              Datum:
-              <input type="date" v-model="date" required />
-            </label>
-            <label>
-              Trajecttype:
-              <select v-model="tripType" required>
-                <option value="FULL">Volledig</option>
-                <option value="PARTIAL">Gedeeltelijk</option>
-              </select>
-            </label>
-            <button type="submit" :disabled="submitting">Registreer</button>
-          </form>
-          <p v-if="error" class="error">{{ error }}</p>
-          <p v-if="success" class="success">Registratie opgeslagen!</p>
-        </div>
-      </div>
+
       <div class="card">
-        <h2>Maandoverzicht ({{ selectedMonth }})</h2>
-        <label>
-          Maand:
-          <input type="month" v-model="selectedMonth" @change="fetchTrips" />
-        </label>
-        <table v-if="trips.length">
-          <thead>
-            <tr>
-              <th>Datum</th>
-              <th>Type</th>
-              <th>Afstand (km)</th>
-              <th>Bedrag (€)</th>
-              <th>Fiscaal statuut</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="trip in trips" :key="trip.id">
-              <td>{{ trip.date }}</td>
-              <td>{{ trip.tripType }}</td>
-              <td>{{ trip.kmSnapshot }}</td>
-              <td>{{ trip.amountSnapshot.toFixed(2) }}</td>
-              <td>{{ trip.fiscalStatusSnapshot === 'TAX_FREE' ? 'Onbelast' : 'Belast' }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else>Geen registraties voor deze maand.</p>
+        <h2>🗓️ Nieuwe Rit Registreren</h2>
+        <form @submit.prevent="submitTrip" class="trip-form">
+          <div class="form-group">
+            <label>Datum</label>
+            <input type="date" v-model="date" required />
+          </div>
+          <div class="form-group">
+            <label>Type Traject</label>
+            <select v-model="tripType">
+              <option value="FULL">Volledig Woon-Werk</option>
+              <option value="PARTIAL">Gedeeltelijk Traject</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="submit" :disabled="submitting" class="btn-primary">
+              {{ submitting ? 'Bezig...' : 'Registreren' }}
+            </button>
+          </div>
+        </form>
+        
+        <p v-if="error" class="msg-error">{{ error }}</p>
+        <p v-if="success" class="msg-success">Rit succesvol opgeslagen!</p>
+      </div>
+
+      <div class="card">
+        <div class="list-header">
+          <h2>Mijn Ritten</h2>
+          <div class="month-selector">
+            <label>Maand:</label>
+            <input type="month" v-model="selectedMonth" @change="fetchTrips" />
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table v-if="trips.length">
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Type</th>
+                <th>Afstand</th>
+                <th>Vergoeding</th>
+                <th>Status</th>
+                <th>Actie</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in trips" :key="t.id">
+                <td>{{ t.date }}</td>
+                <td>
+                  <span :class="t.tripType === 'FULL' ? 'badge badge-blue' : 'badge badge-yellow'">
+                    {{ t.tripType === 'FULL' ? 'Volledig' : 'Deels' }}
+                  </span>
+                </td>
+                <td>{{ t.kmSnapshot }} km</td>
+                <td>€ {{ t.amountSnapshot.toFixed(2) }}</td>
+                <td>
+                  <span v-if="t.fiscalStatusSnapshot === 'TAX_FREE'" class="text-success">Onbelast</span>
+                  <span v-else class="text-danger">Belast</span>
+                </td>
+                <td>
+                  <button @click="deleteTrip(t.id)" class="btn-icon" title="Verwijderen">🗑️</button>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr style="background: #f1f5f9; font-weight: bold;">
+                <td colspan="3">Totaal deze maand</td>
+                <td>€ {{ totalAmount.toFixed(2) }}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+          <p v-else class="empty-state">Geen ritten gevonden voor deze maand.</p>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useUserStore } from '../store';
+
 const API = 'http://localhost:3001';
-const error = ref('');
-const success = ref(false);
+const userStore = useUserStore();
+
+// State
 const date = ref(new Date().toISOString().slice(0, 10));
 const tripType = ref('FULL');
 const trips = ref([]);
 const selectedMonth = ref(new Date().toISOString().slice(0, 7));
 const profileLoaded = ref(false);
 const hasProfile = ref(false);
-const profileError = ref('');
 const submitting = ref(false);
+const error = ref('');
+const success = ref(false);
 
-function getHeaders() {
-  return { 'Content-Type': 'application/json', 'x-demo-user-id': localStorage.getItem('demoUserId') };
-}
+// Computed
+const totalAmount = computed(() => trips.value.reduce((sum, t) => sum + t.amountSnapshot, 0));
 
-async function checkProfile() {
-  profileLoaded.value = false;
-  profileError.value = '';
-  try {
-    const res = await fetch(`${API}/me`, { headers: getHeaders() });
-    if (!res.ok) throw new Error('Kon profiel niet ophalen');
-    const me = await res.json();
-    hasProfile.value = !!(me && me.profile);
-    profileLoaded.value = true;
-  } catch (e) {
-    profileError.value = e.message;
-    profileLoaded.value = true;
+// Methods
+async function init() {
+  await userStore.fetchMe();
+  // Check of profile bestaat in user object
+  if (userStore.user?.profile) {
+    hasProfile.value = true;
   }
+  profileLoaded.value = true;
+  fetchTrips();
 }
 
 async function fetchTrips() {
-  error.value = '';
   try {
-    const res = await fetch(`${API}/trips?month=${selectedMonth.value}`, { headers: getHeaders() });
-    if (!res.ok) throw new Error('Kon trips niet ophalen');
-    trips.value = await res.json();
+    const res = await fetch(`${API}/trips?month=${selectedMonth.value}`, { headers: userStore.authHeaders });
+    if (res.ok) {
+      trips.value = await res.json();
+    }
   } catch (e) {
-    error.value = e.message;
-    trips.value = [];
+    console.error("Fetch trips error", e);
   }
 }
 
 async function submitTrip() {
+  submitting.value = true;
   error.value = '';
   success.value = false;
-  submitting.value = true;
+  
   try {
     const res = await fetch(`${API}/trips`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: userStore.authHeaders,
       body: JSON.stringify({ date: date.value, tripType: tripType.value })
     });
+    
+    const data = await res.json();
+    
     if (!res.ok) {
-      const data = await res.json();
-      if (data.error === 'NO_PROFILE') {
-        error.value = 'Je profiel is nog niet geactiveerd. Wacht op admin.';
-      } else if (data.error === 'MAX_2_PER_DAY') {
-        error.value = 'Maximaal 2 registraties per dag toegestaan.';
-      } else if (data.error === 'DEADLINE_PASSED') {
-        error.value = 'Deadline voor deze maand is verstreken.';
-      } else if (data.error === 'CAP_REACHED_BE_BLOCK') {
-        error.value = 'Belastingvrij plafond bereikt. Geen extra registraties toegestaan.';
-      } else {
-        error.value = data.error || 'Fout bij registratie';
-      }
-      submitting.value = false;
-      return;
+      // Specifieke foutmeldingen vertalen naar NL
+      if (data.error === 'CAP_REACHED_BE_BLOCK') error.value = "⛔ Limiet bereikt (BE Plafond). Registratie geblokkeerd.";
+      else if (data.error === 'MAX_2_PER_DAY') error.value = "⛔ Maximaal 2 ritten per dag toegestaan.";
+      else if (data.error === 'DEADLINE_PASSED') error.value = "⛔ Deadline voor deze maand is verstreken.";
+      else error.value = data.error || "Er is een fout opgetreden.";
+    } else {
+      success.value = true;
+      fetchTrips(); // Lijst verversen
     }
-    success.value = true;
-    await fetchTrips();
-    submitting.value = false;
-  } catch (e) {
-    error.value = e.message;
+  } catch(e) {
+    error.value = "Netwerkfout: Kan server niet bereiken.";
+  } finally {
     submitting.value = false;
   }
 }
 
-onMounted(async () => {
-  await checkProfile();
-  await fetchTrips();
-});
+async function deleteTrip(id) {
+  if(!confirm("Weet je zeker dat je deze rit wilt verwijderen?")) return;
+  
+  try {
+    const res = await fetch(`${API}/trips/${id}`, { method: 'DELETE', headers: userStore.authHeaders });
+    
+    if (res.ok) {
+      fetchTrips();
+    } else {
+      const data = await res.json();
+      alert(data.error === 'DEADLINE_PASSED' ? "Kan niet verwijderen: Deadline verstreken." : "Kon rit niet verwijderen.");
+    }
+  } catch (e) {
+    alert("Netwerkfout bij verwijderen.");
+  }
+}
+
+onMounted(init);
 </script>
 
 <style scoped>
-.page {
-  max-width: 700px;
-  margin: 40px auto;
-  padding: 24px;
-  font-family: system-ui, sans-serif;
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1.5rem;
 }
-.card {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid #444;
-  border-radius: 14px;
+.stat-item small { display: block; color: #64748b; margin-bottom: 4px; }
+.stat-item strong { font-size: 1.1rem; color: #0f172a; }
+
+.trip-form {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
 }
-label {
-  display: block;
-  margin-bottom: 10px;
+.form-actions { margin-bottom: 1rem; } /* Align button with inputs */
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
-input, select {
-  margin-left: 8px;
-  margin-bottom: 8px;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 12px;
-}
-th, td {
-  border: 1px solid #444;
-  padding: 6px 10px;
-  text-align: left;
-}
-.error {
-  margin-top: 14px;
-  color: #ff6b6b;
-}
-.success {
-  margin-top: 14px;
-  color: #4caf50;
-}
+.month-selector { display: flex; align-items: center; gap: 0.5rem; }
+.empty-state { text-align: center; color: #64748b; padding: 2rem; }
 </style>

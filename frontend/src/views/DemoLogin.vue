@@ -1,111 +1,50 @@
 <template>
-  <div class="page">
+  <div class="card">
     <h1>Demo Login</h1>
-    <p>Kies een demo user om de flow te tonen.</p>
-
-    <div class="buttons">
-      <button @click="login(1)">Employee BE</button>
-      <button @click="login(2)">Employee NL (Own)</button>
-      <button @click="login(3)">Admin</button>
-      <button @click="login(4)">Payroll</button>
+    <p>Selecteer een rol om de Proof of Concept te testen.</p>
+    
+    <div class="login-grid">
+      <button @click="handleLogin(1)" class="login-btn">
+        <h3>Werknemer BE</h3>
+        <small>Limiet + Blokkeren</small>
+      </button>
+      <button @click="handleLogin(2)" class="login-btn">
+        <h3>Werknemer NL</h3>
+        <small>Eigen Fiets (Onbelast)</small>
+      </button>
+      <button @click="handleLogin(3)" class="login-btn">
+        <h3>Admin</h3>
+        <small>Settings & Export</small>
+      </button>
+      <button @click="handleLogin(4)" class="login-btn">
+        <h3>Payroll</h3>
+        <small>Lijsten & Download</small>
+      </button>
     </div>
-
-    <div v-if="me" class="card">
-      <h2>Ingelogd als</h2>
-      <p><b>{{ me.name }}</b></p>
-      <p>{{ me.role }} – {{ me.country }} <span v-if="me.bikeType">({{ me.bikeType }})</span></p>
-      <button @click="goToDashboard()">Ga naar dashboard</button>
-      <button class="secondary" @click="logout()">Logout</button>
-    </div>
-
-    <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="error" class="msg-error">{{ error }}</p>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useUserStore } from '../store';
 
 const router = useRouter();
-const me = ref(null);
-const error = ref("");
+const userStore = useUserStore();
+const error = ref('');
 
-const API = "http://localhost:3001";
-
-async function fetchMe() {
-  const id = localStorage.getItem("demoUserId");
-  if (!id) return;
-
-  const res = await fetch(`${API}/me`, {
-    headers: { "x-demo-user-id": id }
-  });
-
-  if (!res.ok) {
-    me.value = null;
-    error.value = "Kon /me niet ophalen. Backend running?";
-    return;
+async function handleLogin(id) {
+  error.value = '';
+  await userStore.login(id);
+  
+  if (userStore.user) {
+    const role = userStore.user.role;
+    if (role === 'EMPLOYEE') router.push('/employee');
+    else if (role === 'ADMIN') router.push('/admin');
+    else router.push('/payroll');
+  } else {
+    error.value = "Kan niet inloggen. Backend offline?";
   }
-
-  me.value = await res.json();
 }
-
-function routeForRole(role) {
-  if (role === "EMPLOYEE") return "/employee";
-  if (role === "ADMIN") return "/admin";
-  return "/payroll";
-}
-
-async function login(userId) {
-  error.value = "";
-  localStorage.setItem("demoUserId", String(userId));
-  await fetchMe();
-}
-
-function goToDashboard() {
-  if (!me.value) return;
-  router.push(routeForRole(me.value.role));
-}
-
-function logout() {
-  localStorage.removeItem("demoUserId");
-  me.value = null;
-}
-
-fetchMe();
 </script>
-
-<style scoped>
-.page {
-  max-width: 700px;
-  margin: 40px auto;
-  padding: 24px;
-  font-family: system-ui, sans-serif;
-}
-.buttons {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin: 16px 0 24px;
-}
-button {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid #444;
-  background: #1e1e1e;
-  color: white;
-  cursor: pointer;
-}
-button.secondary {
-  background: transparent;
-}
-.card {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid #444;
-  border-radius: 14px;
-}
-.error {
-  margin-top: 14px;
-  color: #ff6b6b;
-}
-</style>
