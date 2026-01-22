@@ -60,21 +60,25 @@ const userStore = useUserStore();
 const error = ref("");
 
 async function handleLogin(id) {
-  error.value = "";
-  try {
-    await userStore.login(id);
-    if (userStore.user) {
-      const role = userStore.user.role;
-      if (role === "EMPLOYEE") router.push("/employee");
-      else if (role === "ADMIN") router.push("/admin");
-      else router.push("/payroll");
-    } else {
-      error.value = "Geen verbinding met backend op poort 3001";
-    }
-  } catch (e) {
-    error.value = "Login fout: " + e.message;
+  error.value = '';
+
+  const result = await userStore.login(id);
+
+  if (result.ok && userStore.user) {
+    const role = userStore.user.role;
+    if (role === 'EMPLOYEE') router.push('/employee');
+    else if (role === 'ADMIN') router.push('/admin');
+    else router.push('/payroll');
+  } else {
+    if (result?.error === 'DEMO_MODE_DISABLED') error.value = "Demo mode staat uit op de backend.";
+    else if (result?.error === 'NETWORK_ERROR') error.value = "Kan backend niet bereiken.";
+    else error.value = "Kan niet inloggen.";
   }
 }
+
+
+ 
+
 </script>
 
 <style scoped>

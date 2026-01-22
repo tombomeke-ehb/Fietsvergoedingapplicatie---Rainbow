@@ -211,32 +211,43 @@ const trips = ref([]);
 const selectedMonth = ref(new Date().toISOString().slice(0, 7));
 const profileLoaded = ref(false);
 const hasProfile = ref(false);
+
 const submitting = ref(false);
 const error = ref('');
 const success = ref(false);
 
+// Settings voor het land van de employee (ratePerKm, deadline, caps, …)
+const countrySettings = ref(null);
+
 // Computed
 const totalAmount = computed(() => trips.value.reduce((sum, t) => sum + t.amountSnapshot, 0));
 
-// Methods
-function formatDate(dateString) {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('nl-NL', { day: '2-digit', month: 'long', year: 'numeric' });
+async function fetchSettingsForMe() {
+  if (!userStore.user?.country) return;
+  try {
+    const res = await fetch(`${API}/settings/${userStore.user.country}`, { headers: userStore.authHeaders });
+    if (res.ok) {
+      countrySettings.value = await res.json();
+    }
+  } catch (e) {
+    console.error("Fetch settings error", e);
+  }
 }
 
 async function init() {
   await userStore.fetchMe();
-  // Check of profile bestaat in user object
-  if (userStore.user?.profile) {
-    hasProfile.value = true;
-  }
+
+  // Profile check: zonder stamgegevens kan je geen km bepalen
+  hasProfile.value = !!userStore.user?.profile;
   profileLoaded.value = true;
-  fetchTrips();
+
+  await fetchSettingsForMe();
+  await fetchTrips();
 }
 
 async function fetchTrips() {
   try {
-    const res = await fetch(`${API}/trips?month=${selectedMonth.value}`, { headers: userStore.authHeaders });
+    const res = await fetch(`${API}/trip-entries?month=${selectedMonth.value}`, { headers: userStore.authHeaders });
     if (res.ok) {
       trips.value = await res.json();
     }
@@ -249,28 +260,31 @@ async function submitTrip() {
   submitting.value = true;
   error.value = '';
   success.value = false;
-  
+
   try {
-    const res = await fetch(`${API}/trips`, {
+    const res = await fetch(`${API}/trip-entries`, {
       method: 'POST',
       headers: userStore.authHeaders,
       body: JSON.stringify({ date: date.value, tripType: tripType.value })
     });
-    
+
     const data = await res.json();
-    
+
     if (!res.ok) {
-      // Specifieke foutmeldingen vertalen naar NL
-      if (data.error === 'CAP_REACHED_BE_BLOCK') error.value = "Limiet bereikt (BE Plafond). Registratie geblokkeerd.";
-      else if (data.error === 'MAX_2_PER_DAY') error.value = "Maximaal 2 ritten per dag toegestaan.";
-      else if (data.error === 'DEADLINE_PASSED') error.value = "Deadline voor deze maand is verstreken.";
+      // Backend errors naar duidelijke NL boodschap
+      if (data.error === 'CAP_REACHED_BE_BLOCK') error.value = "⛔ Limiet bereikt (BE plafond). Registratie geblokkeerd.";
+      else if (data.error === 'MAX_2_PER_DAY') error.value = "⛔ Maximaal 2 ritten per dag toegestaan.";
+      else if (data.error === 'DEADLINE_PASSED') error.value = "⛔ Deadline voor deze maand is verstreken.";
+      else if (data.error === 'NO_PROFILE') error.value = "⛔ Profiel ontbreekt: vraag admin om stamgegevens in te vullen.";
       else error.value = data.error || "Er is een fout opgetreden.";
     } else {
       success.value = true;
-      fetchTrips(); // Lijst verversen
-      setTimeout(() => success.value = false, 4000);
+      await fetchTrips();
+
+      // success message automatisch terug weg
+      setTimeout(() => (success.value = false), 2500);
     }
-  } catch(e) {
+  } catch (e) {
     error.value = "Netwerkfout: Kan server niet bereiken.";
   } finally {
     submitting.value = false;
@@ -278,16 +292,22 @@ async function submitTrip() {
 }
 
 async function deleteTrip(id) {
-  if(!confirm("Weet je zeker dat je deze rit wilt verwijderen?")) return;
-  
+  if (!confirm("Weet je zeker dat je deze rit wilt verwijderen?")) return;
+
   try {
-    const res = await fetch(`${API}/trips/${id}`, { method: 'DELETE', headers: userStore.authHeaders });
-    
+    const res = await fetch(`${API}/trip-entries/${id}`, {
+      method: 'DELETE',
+      headers: userStore.authHeaders
+    });
+
     if (res.ok) {
-      fetchTrips();
+      await fetchTrips();
     } else {
       const data = await res.json();
-      alert(data.error === 'DEADLINE_PASSED' ? "Kan niet verwijderen: Deadline verstreken." : "Kon rit niet verwijderen.");
+      alert(data.error === 'DEADLINE_PASSED'
+        ? "Kan niet verwijderen: deadline verstreken."
+        : "Kon rit niet verwijderen."
+      );
     }
   } catch (e) {
     alert("Netwerkfout bij verwijderen.");

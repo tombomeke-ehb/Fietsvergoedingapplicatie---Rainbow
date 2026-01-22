@@ -230,116 +230,187 @@ import { useUserStore } from "../store";
 const API = "http://localhost:3001";
 const userStore = useUserStore();
 
-// --- STATE ---
 const employees = ref([]);
 const profileMsg = ref("");
 const profileError = ref("");
 
 const selectedCountry = ref("BE");
 const settings = ref(null);
-const settingsMsg = ref("");
+const settingsMsg = ref('');
+const settingsError = ref('');
 
 const exportMonth = ref(new Date().toISOString().slice(0, 7));
 const exportMsg = ref("");
 const exportError = ref("");
 
-// --- METHODS: Employees (Stamgegevens) ---
+// --- Employees ---
 async function fetchEmployees() {
+  profileError.value = '';
   try {
-    const res = await fetch(`${API}/employees`, {
-      headers: userStore.authHeaders,
-    });
-    if (!res.ok) throw new Error("Kon werknemers niet ophalen");
+    const res = await fetch(`${API}/employees`, { headers: userStore.authHeaders });
+    if (!res.ok) throw new Error('Kon werknemers niet ophalen');
 
     const data = await res.json();
 
-    // Zorg dat elke employee een profile object heeft, ook al is het leeg in DB
     employees.value = data.map((emp) => {
-      if (!emp.profile) {
-        emp.profile = { fullCommuteKm: 0, partialCommuteKm: 0 };
+      if (!emp.profile) emp.profile = { fullCommuteKm: 0, partialCommuteKm: 0 };
+
+      // Zorg dat bikeType voor NL altijd een geldige enum is (OWN/COMPANY)
+      const c = (emp.country || '').toUpperCase();
+      if (c === 'NL') {
+        if (!emp.bikeType) emp.bikeType = 'OWN';
+        if (!['OWN', 'COMPANY'].includes(emp.bikeType)) emp.bikeType = 'OWN';
+      } else {
+        // Voor BE mag bikeType eigenlijk irrelevant zijn
+        // (we laten het staan als backend het meegeeft, maar UI toont het niet)
       }
+
       return emp;
     });
   } catch (e) {
     console.error(e);
+    profileError.value = 'Fout bij ophalen werknemers.';
   }
 }
 
 async function saveProfile(emp) {
-  profileMsg.value = "";
-  profileError.value = "";
+  profileMsg.value = '';
+  profileError.value = '';
+
   try {
     const body = {
-      fullCommuteKm: emp.profile.fullCommuteKm,
-      partialCommuteKm: emp.profile.partialCommuteKm,
-      bikeType: emp.bikeType, // Enkel relevant voor NL
+      fullCommuteKm: Number(emp.profile.fullCommuteKm ?? 0),
+      partialCommuteKm: Number(emp.profile.partialCommuteKm ?? 0),
     };
 
+    // Enkel NL mag bikeType krijgen volgens je functionele analyse
+    const c = (emp.country || '').toUpperCase();
+    if (c === 'NL') body.bikeType = emp.bikeType;
+
     const res = await fetch(`${API}/employees/${emp.id}/profile`, {
-      method: "PUT",
-      headers: userStore.authHeaders,
+      method: 'PUT',
+      headers: {
+        ...userStore.authHeaders,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(body),
     });
 
     if (res.ok) {
       profileMsg.value = `Stamgegevens voor ${emp.name} opgeslagen!`;
-      // Even wachten en dan bericht weg
-      setTimeout(() => (profileMsg.value = ""), 3000);
+      setTimeout(() => (profileMsg.value = ''), 3000);
     } else {
-      throw new Error("Opslaan mislukt");
+      const data = await res.json().catch(() => ({}));
+      profileError.value = data.error || 'Opslaan mislukt.';
     }
   } catch (e) {
-    profileError.value = "Fout bij opslaan profiel.";
+    console.error(e);
+    profileError.value = 'Fout bij opslaan profiel.';
   }
 }
 
-// --- METHODS: Settings ---
+// --- Settings ---
 async function fetchSettings() {
-  const res = await fetch(`${API}/settings/${selectedCountry.value}`, {
-    headers: userStore.authHeaders,
-  });
-  if (res.ok) settings.value = await res.json();
+  settingsMsg.value = '';
+  settingsError.value = '';
+  settings.value = null;
+
+  try {
+    const res = await fetch(`${API}/settings/${selectedCountry.value}`, { headers: userStore.authHeaders });
+    if (!res.ok) throw new Error('Kon instellingen niet ophalen');
+
+    const s = await res.json();
+
+    // Kleine safety defaults zodat UI niet breekt
+    settings.value = {
+      ratePerKm: s.ratePerKm ?? 0,
+      deadlineDayNextMonth: s.deadlineDayNextMonth ?? 12,
+      capType: s.capType ?? 'NONE',
+      monthlyCapAmount: s.monthlyCapAmount ?? null,
+      yearlyCapAmount: s.yearlyCapAmount ?? null,
+      beBlockAfterCap: !!s.beBlockAfterCap,
+      exportDayOfMonth: s.exportDayOfMonth ?? 1,
+      // laat extra velden (id, createdAt, updatedAt) gerust bestaan op backend,
+      // maar we tonen ze niet in UI.
+      ...s,
+    };
+  } catch (e) {
+    console.error(e);
+    settingsError.value = 'Fout bij ophalen instellingen.';
+  }
 }
 
 async function saveSettings() {
-  const res = await fetch(`${API}/settings/${selectedCountry.value}`, {
-    method: "PUT",
-    headers: userStore.authHeaders,
-    body: JSON.stringify(settings.value),
-  });
-  if (res.ok) {
-    settingsMsg.value = "Instellingen opgeslagen!";
-    setTimeout(() => (settingsMsg.value = ""), 3000);
+  settingsMsg.value = '';
+  settingsError.value = '';
+
+  try {
+    // Verstuur enkel de relevante velden
+    const payload = {
+      ratePerKm: Number(settings.value.ratePerKm ?? 0),
+      deadlineDayNextMonth: Number(settings.value.deadlineDayNextMonth ?? 12),
+      capType: settings.value.capType ?? 'NONE',
+      monthlyCapAmount: settings.value.capType === 'MONTHLY'
+        ? Number(settings.value.monthlyCapAmount ?? 0)
+        : null,
+      yearlyCapAmount: settings.value.capType === 'YEARLY'
+        ? Number(settings.value.yearlyCapAmount ?? 0)
+        : null,
+      beBlockAfterCap: selectedCountry.value === 'BE' ? !!settings.value.beBlockAfterCap : false,
+      exportDayOfMonth: Number(settings.value.exportDayOfMonth ?? 1),
+    };
+
+    const res = await fetch(`${API}/settings/${selectedCountry.value}`, {
+      method: 'PUT',
+      headers: {
+        ...userStore.authHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      settingsMsg.value = 'Instellingen opgeslagen!';
+      setTimeout(() => (settingsMsg.value = ''), 3000);
+      await fetchSettings();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      settingsError.value = data.error || 'Kon instellingen niet opslaan.';
+    }
+  } catch (e) {
+    console.error(e);
+    settingsError.value = 'Netwerkfout bij opslaan.';
   }
 }
 
-// --- METHODS: Export ---
+// --- Export ---
 async function triggerExport() {
-  exportMsg.value = "";
-  exportError.value = "";
+  exportMsg.value = '';
+  exportError.value = '';
+
   try {
-    const res = await fetch(
-      `${API}/exports/trigger?month=${exportMonth.value}`,
-      {
-        method: "POST",
-        headers: userStore.authHeaders,
-      },
-    );
+    const res = await fetch(`${API}/exports/trigger?month=${exportMonth.value}`, {
+      method: 'POST',
+      headers: userStore.authHeaders,
+    });
+
     if (res.ok) {
       const data = await res.json();
       exportMsg.value = `Export job gestart! (Aantal records: ${data.count})`;
     } else {
-      exportError.value = "Fout bij starten export.";
+      const data = await res.json().catch(() => ({}));
+      exportError.value = data.error || 'Fout bij starten export.';
     }
   } catch (e) {
-    exportError.value = "Netwerkfout.";
+    console.error(e);
+    exportError.value = 'Netwerkfout.';
   }
 }
 
 onMounted(async () => {
   await userStore.fetchMe();
-  fetchEmployees();
-  fetchSettings();
+  await fetchEmployees();
+  await fetchSettings();
 });
 </script>
 

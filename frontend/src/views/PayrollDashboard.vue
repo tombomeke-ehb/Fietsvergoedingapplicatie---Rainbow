@@ -166,30 +166,23 @@ async function fetchExports() {
 }
 
 async function downloadCsv(id) {
-  try {
-    const res = await fetch(`${API}/exports/${id}/download`, { 
-      headers: userStore.authHeaders 
-    });
-    if (res.ok) {
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `export_${id}_${selectedMonth.value}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } else {
-      alert("Download mislukt");
-    }
-  } catch (e) {
-    alert("Netwerkfout bij downloaden");
+  const res = await fetch(`${API}/exports/${id}/download`, { headers: userStore.authHeaders });
+  if (res.ok) {
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `export_${id}.csv`;
+    a.click();
+
+    // netjes opruimen
+    window.URL.revokeObjectURL(url);
+  } else {
+    alert("Download mislukt");
   }
 }
 
-// Placeholder for bulk download
-function downloadAllCsv() {
-  alert("Deze functie komt binnenkort beschikbaar.");
-}
 
 onMounted(() => {
   userStore.fetchMe().then(fetchExports);

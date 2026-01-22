@@ -1,45 +1,51 @@
 // backend/index.js
-const express = require('express');
-const cors = require('cors');
+require('dotenv').config();
 
-const authMiddleware = require('./middleware/auth');
-const demoRoutes = require('./routes/demoRoutes');
+const express = require("express");
+const cors = require("cors");
+
+const authMiddleware = require("./middleware/auth");
+
+const demoRoutes = require("./routes/demoRoutes");
+const tripRoutes = require("./routes/tripRoutes");
+const exportRoutes = require("./routes/exportRoutes");
+const settingsRoutes = require("./routes/settingsRoutes");
+const employeeRoutes = require("./routes/employeeRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+console.log("DEMO_MODE =", process.env.DEMO_MODE);
+
+
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: "http://localhost:5173",
     credentials: false,
-    allowedHeaders: ['Content-Type', 'x-demo-user-id'],
+    // In PoC gebruiken we een custom header om de demo-user door te geven.
+    allowedHeaders: ["Content-Type", "x-demo-user-id"],
   })
 );
 
 app.use(express.json());
 
-// Health
-app.get('/', (req, res) => res.send('Fietsvergoeding Backend API'));
+// Simple health check
+app.get("/", (req, res) => res.send("Fietsvergoeding Backend API"));
 
-// Demo routes (zonder auth verplicht)
-app.use('/demo', demoRoutes);
+// Demo routes: bewust zonder auth middleware (auth zit op x-demo-user-id)
+app.use("/demo", demoRoutes);
 
-// Auth middleware voor de rest
+// Alles onder deze lijn vereist een geldige demo user header
 app.use(authMiddleware);
 
-const tripRoutes = require("./routes/tripRoutes");
-const exportRoutes = require("./routes/exportRoutes");
-const settingsRoutes = require('./routes/settingsRoutes');
-const employeeRoutes = require('./routes/employeeRoutes');
-
-app.use("/trips", tripRoutes);
+// Kern routes (zoals in je analyse)
+app.use("/trip-entries", tripRoutes);
 app.use("/exports", exportRoutes);
-app.use('/settings', settingsRoutes);
-app.use('/employees', employeeRoutes);
+app.use("/settings", settingsRoutes);
+app.use("/employees", employeeRoutes);
 
-// TODO: hier komen straks echte routes:
-app.get('/me', (req, res) => {
-  // req.user is gezet door middleware
+// Handig endpoint voor de frontend om “wie ben ik?” te tonen
+app.get("/me", (req, res) => {
   res.json({
     id: req.user.id,
     name: req.user.name,
