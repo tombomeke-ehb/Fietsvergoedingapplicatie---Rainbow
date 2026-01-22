@@ -12,7 +12,7 @@
   --secondary: #2D3748;
   
   /* Background & Surface */
-  --background: #F7FAFC;
+  --background: #E6FFFA; /* Soft Mint Green Background */
   --surface: #FFFFFF;
   
   /* Text Colors */
@@ -405,11 +405,17 @@ td {
 }
 
 tbody tr {
-  transition: background-color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 3px solid transparent;
 }
 
 tbody tr:hover {
-  background-color: var(--table-row-hover);
+  background-color: #F0FFF4; /* Light Mint Green */
+  transform: scale(1.01);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border-left-color: var(--primary);
+  z-index: 10;
+  position: relative;
 }
 
 tbody tr:last-child td { 

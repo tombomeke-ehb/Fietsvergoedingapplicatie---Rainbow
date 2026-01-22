@@ -123,79 +123,66 @@
           @submit.prevent="saveSettings"
           class="settings-form"
         >
-          <div class="form-group">
-            <label>Vergoeding per km</label>
-            <div class="input-group">
-              <span class="prefix">€</span>
-              <input
-                type="number"
-                step="0.01"
-                v-model.number="settings.ratePerKm"
-              />
+          <div class="form-row">
+            <div class="form-group half">
+              <label>Vergoeding per km</label>
+              <div class="input-group">
+                <span class="prefix">€</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  v-model.number="settings.ratePerKm"
+                />
+              </div>
             </div>
-          </div>
-          
-          <div class="form-group">
-            <label>Deadline (dag v/d maand)</label>
-            <div class="input-group">
-              <span class="prefix">📅</span>
-              <input type="number" v-model.number="settings.deadlineDayNextMonth" />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Type Limiet (Cap)</label>
-            <select v-model="settings.capType">
-              <option value="NONE">🔓 Geen Limiet</option>
-              <option value="MONTHLY">📅 Maandelijks</option>
-              <option value="YEARLY">📆 Jaarlijks</option>
-              <option value="BOTH">🔒 Beide</option>
-            </select>
-          </div>
-
-          <div
-            v-if="['MONTHLY', 'BOTH'].includes(settings.capType)"
-            class="form-group"
-          >
-            <label>Maandplafond</label>
-            <div class="input-group">
-              <span class="prefix">€</span>
-              <input
-                type="number"
-                step="0.01"
-                v-model.number="settings.monthlyCapAmount"
-              />
+            
+            <div class="form-group half">
+              <label>Deadline (dag v/d maand)</label>
+              <div class="input-group">
+                <span class="prefix">📅</span>
+                <input type="number" v-model.number="settings.deadlineDayNextMonth" />
+              </div>
             </div>
           </div>
 
-          <div
-            v-if="['YEARLY', 'BOTH'].includes(settings.capType)"
-            class="form-group"
-          >
-             <label>Jaarplafond</label>
-             <div class="input-group">
-              <span class="prefix">€</span>
-              <input
-                type="number"
-                step="0.01"
-                v-model.number="settings.yearlyCapAmount"
-              />
+          <div class="form-row">
+            <div class="form-group half">
+              <label>Type Limiet (Cap)</label>
+              <select v-model="settings.capType">
+                <option value="NONE">🔓 Geen</option>
+                <option value="MONTHLY">📅 Maand</option>
+                <option value="YEARLY">📆 Jaar</option>
+                <option value="BOTH">🔒 Beide</option>
+              </select>
+            </div>
+
+            <div v-if="['MONTHLY', 'BOTH'].includes(settings.capType)" class="form-group half">
+              <label>Maandplafond</label>
+              <div class="input-group">
+                <span class="prefix">€</span>
+                <input type="number" step="0.01" v-model.number="settings.monthlyCapAmount" />
+              </div>
+            </div>
+
+            <div v-if="['YEARLY', 'BOTH'].includes(settings.capType)" class="form-group half">
+               <label>Jaarplafond</label>
+               <div class="input-group">
+                <span class="prefix">€</span>
+                <input type="number" step="0.01" v-model.number="settings.yearlyCapAmount" />
+              </div>
             </div>
           </div>
 
-          <div v-if="selectedCountry === 'BE'" class="form-group checkbox-wrapper">
+          <div v-if="selectedCountry === 'BE'" class="form-group checkbox-wrapper" style="margin-top: 0.5rem;">
             <label class="switch">
-              <input
-                type="checkbox"
-                v-model="settings.beBlockAfterCap"
-              />
+              <input type="checkbox" v-model="settings.beBlockAfterCap" />
               <span class="slider round"></span>
             </label>
-            <span class="switch-label">Blokkeren na bereiken plafond</span>
+            <span class="switch-label">Blokkeren na plafond</span>
           </div>
 
-          <button type="submit" class="btn-primary full-width-btn">
-            💾 Instellingen Opslaan
+          <button type="submit" class="btn-primary full-width-btn" style="margin-top: 1rem;">
+            💾 Opslaan
           </button>
         </form>
         <transition name="fade">
@@ -582,6 +569,17 @@ input:checked + .slider:before {
   border-radius: 6px;
   color: #2C5282;
   font-size: 0.9rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0px;
+}
+
+.form-group.half {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Transitions */
