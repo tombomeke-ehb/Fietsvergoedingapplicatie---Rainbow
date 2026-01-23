@@ -9,7 +9,7 @@
 
       <form @submit.prevent="submitLoginForm">
         <div class="roles-grid">
-        <button type="button" @click="selectUser(1)" class="role-card">
+        <button type="button" @click="selectUser(1)" :class="['role-card', selectedUserId === 1 ? 'selected' : '']">
           <div class="role-icon belgium">🇧🇪</div>
           <div class="role-info">
             <h3>Werknemer BE</h3>
@@ -18,7 +18,7 @@
           <div class="arrow">➜</div>
         </button>
 
-        <button type="button" @click="selectUser(2)" class="role-card">
+        <button type="button" @click="selectUser(2)" :class="['role-card', selectedUserId === 2 ? 'selected' : '']">
           <div class="role-icon netherlands">🇳🇱</div>
           <div class="role-info">
             <h3>Werknemer NL</h3>
@@ -27,7 +27,7 @@
           <div class="arrow">➜</div>
         </button>
 
-        <button type="button" @click="selectUser(3)" class="role-card">
+        <button type="button" @click="selectUser(3)" :class="['role-card', selectedUserId === 3 ? 'selected' : '']">
           <div class="role-icon admin">⚙️</div>
           <div class="role-info">
             <h3>Admin</h3>
@@ -36,7 +36,7 @@
           <div class="arrow">➜</div>
         </button>
 
-        <button type="button" @click="selectUser(4)" class="role-card">
+        <button type="button" @click="selectUser(4)" :class="['role-card', selectedUserId === 4 ? 'selected' : '']">
           <div class="role-icon payroll">📊</div>
           <div class="role-info">
             <h3>Payroll</h3>
@@ -54,7 +54,13 @@
         </div>
         <div class="form-group" style="margin-bottom:1.5rem;text-align:left;">
           <label>Handtekening (teken hieronder):</label>
-          <SignaturePad v-model="signature" :width="320" :height="100" style="margin-top:0.5rem;" />
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;">
+            <SignaturePad v-model="signature" :width="sigWidth" :height="sigHeight" />
+            <div style="display:flex;flex-direction:column;gap:0.3rem;">
+              <button type="button" @click="sigWidth+=40" style="font-size:0.9em;">➕ Breder</button>
+              <button type="button" @click="sigHeight+=20" style="font-size:0.9em;">➕ Hoger</button>
+            </div>
+          </div>
           <div v-if="signature" style="font-size:0.85em;color:#888;margin-top:0.3rem;">Handtekening geregistreerd</div>
         </div>
         <button type="submit" class="btn-primary full-width-btn" style="margin-bottom:1.5rem;">Inloggen</button>
@@ -63,7 +69,7 @@
       <div class="card" v-if="users.length">
         <h2>Alle gebruikers</h2>
         <div class="user-list">
-          <button type="button" v-for="u in users" :key="u.id" @click="selectUser(u.id)" class="user-btn">
+          <button type="button" v-for="u in users" :key="u.id" @click="selectUser(u.id)" :class="['user-btn', selectedUserId === u.id ? 'selected' : '']">
             <span class="user-avatar">{{ u.name.charAt(0) }}</span>
             <span class="user-name">{{ u.name }}</span>
             <span class="user-role">{{ u.role }}</span>
@@ -91,6 +97,8 @@ const users = ref([]);
 const akkoord = ref(false);
 const signature = ref("");
 const selectedUserId = ref(null);
+const sigWidth = ref(320);
+const sigHeight = ref(100);
 
 async function fetchDemoUsers() {
   try {
@@ -338,9 +346,10 @@ p {
   color: #718096;
   margin-left: 0.5rem;
 }
-</style>
+
 .role-card.selected, .user-btn.selected {
   border: 2px solid #2f855a !important;
   background: #e6fcf5 !important;
   box-shadow: 0 0 0 2px #b7f5d8;
 }
+</style>
