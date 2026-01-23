@@ -7,8 +7,9 @@
         <p>Proof of Concept Login</p>
       </div>
 
-      <div class="roles-grid">
-        <button @click="handleLogin(1)" class="role-card">
+      <form @submit.prevent="submitLoginForm">
+        <div class="roles-grid">
+        <button type="button" @click="selectUser(1)" class="role-card">
           <div class="role-icon belgium">🇧🇪</div>
           <div class="role-info">
             <h3>Werknemer BE</h3>
@@ -17,7 +18,7 @@
           <div class="arrow">➜</div>
         </button>
 
-        <button @click="handleLogin(2)" class="role-card">
+        <button type="button" @click="selectUser(2)" class="role-card">
           <div class="role-icon netherlands">🇳🇱</div>
           <div class="role-info">
             <h3>Werknemer NL</h3>
@@ -26,7 +27,7 @@
           <div class="arrow">➜</div>
         </button>
 
-        <button @click="handleLogin(3)" class="role-card">
+        <button type="button" @click="selectUser(3)" class="role-card">
           <div class="role-icon admin">⚙️</div>
           <div class="role-info">
             <h3>Admin</h3>
@@ -35,7 +36,7 @@
           <div class="arrow">➜</div>
         </button>
 
-        <button @click="handleLogin(4)" class="role-card">
+        <button type="button" @click="selectUser(4)" class="role-card">
           <div class="role-icon payroll">📊</div>
           <div class="role-info">
             <h3>Payroll</h3>
@@ -43,12 +44,26 @@
           </div>
           <div class="arrow">➜</div>
         </button>
-      </div>
+        </div>
+
+        <div class="form-group" style="margin:2rem 0 1rem 0; text-align:left;">
+          <label style="display:flex;align-items:center;gap:0.5rem;">
+            <input type="checkbox" v-model="akkoord" required />
+            <span>Ik ga akkoord met de <a href="#" tabindex="-1">regels en privacyverklaring</a></span>
+          </label>
+        </div>
+        <div class="form-group" style="margin-bottom:1.5rem;text-align:left;">
+          <label>Handtekening (teken hieronder):</label>
+          <SignaturePad v-model="signature" :width="320" :height="100" style="margin-top:0.5rem;" />
+          <div v-if="signature" style="font-size:0.85em;color:#888;margin-top:0.3rem;">Handtekening geregistreerd</div>
+        </div>
+        <button type="submit" class="btn-primary full-width-btn" style="margin-bottom:1.5rem;">Inloggen</button>
+      </form>
 
       <div class="card" v-if="users.length">
         <h2>Alle gebruikers</h2>
         <div class="user-list">
-          <button v-for="u in users" :key="u.id" @click="handleLogin(u.id)" class="user-btn">
+          <button type="button" v-for="u in users" :key="u.id" @click="selectUser(u.id)" class="user-btn">
             <span class="user-avatar">{{ u.name.charAt(0) }}</span>
             <span class="user-name">{{ u.name }}</span>
             <span class="user-role">{{ u.role }}</span>
@@ -62,15 +77,20 @@
   </div>
 </template>
 
+
 <script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useUserStore } from "../store";
+import SignaturePad from '../components/SignaturePad.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
 const error = ref("");
 const users = ref([]);
+const akkoord = ref(false);
+const signature = ref("");
+const selectedUserId = ref(null);
 
 async function fetchDemoUsers() {
   try {
@@ -85,11 +105,26 @@ async function fetchDemoUsers() {
   }
 }
 
-async function handleLogin(id) {
+
+function selectUser(id) {
+  selectedUserId.value = id;
+}
+
+async function submitLoginForm() {
   error.value = '';
-
-  const result = await userStore.login(id);
-
+  if (!akkoord.value) {
+    error.value = 'Je moet akkoord gaan met de regels.';
+    return;
+  }
+  if (!signature.value || signature.value.length < 100) {
+    error.value = 'Gelieve een handtekening te plaatsen.';
+    return;
+  }
+  if (!selectedUserId.value) {
+    error.value = 'Selecteer een gebruiker of rol.';
+    return;
+  }
+  const result = await userStore.login(selectedUserId.value);
   if (result.ok && userStore.user) {
     const role = userStore.user.role;
     if (role === 'EMPLOYEE') router.push('/employee');
@@ -162,16 +197,20 @@ p {
   margin: 0;
 }
 
+
+
 .roles-grid {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
+
+
+
 .role-card {
   display: flex;
   align-items: center;
-  text-align: left;
   background: white;
   border: 1px solid #e2e8f0;
   padding: 1rem;
@@ -181,24 +220,20 @@ p {
   width: 100%;
 }
 
-.role-card:hover {
-  transform: translateY(-2px);
-  border-color: #2f855a;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  background: #f0fff4;
-}
+
+
+
 
 .role-icon {
   width: 48px;
-  height: 48px;
   border-radius: 12px;
   display: flex;
-  align-items: center;
   justify-content: center;
   font-size: 1.5rem;
   margin-right: 1rem;
   flex-shrink: 0;
 }
+
 
 .role-icon.belgium {
   background: #ebf8ff;
@@ -304,3 +339,8 @@ p {
   margin-left: 0.5rem;
 }
 </style>
+.role-card.selected, .user-btn.selected {
+  border: 2px solid #2f855a !important;
+  background: #e6fcf5 !important;
+  box-shadow: 0 0 0 2px #b7f5d8;
+}
