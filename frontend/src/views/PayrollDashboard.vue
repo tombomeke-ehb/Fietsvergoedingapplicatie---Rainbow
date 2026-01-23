@@ -133,7 +133,15 @@ async function fetchAvailableExportMonths() {
       headers: userStore.getAuthHeaders(false)
     });
     if (!res.ok) return;
-    const months = await res.json();
+    let months = await res.json();
+    // Voeg altijd de huidige maand toe als die nog niet in de lijst staat
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (!months.includes(currentMonth)) {
+      months.unshift(currentMonth);
+    }
+    // Uniek maken (voor het geval de backend hem toch teruggeeft)
+    months = [...new Set(months)];
     monthOptions.value = months.map((value) => {
       const [y, m] = value.split('-').map(Number);
       const d = new Date(y, m - 1, 1);
