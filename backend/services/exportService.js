@@ -7,6 +7,8 @@ const prisma = new PrismaClient();
  * @param {string} yearMonth - "YYYY-MM"
  */
 async function triggerExport(yearMonth) {
+
+  console.log(`[EXPORT] Start triggerExport for`, yearMonth);
   // Haal alle trips van die maand (string-prefix match)
   const trips = await prisma.tripEntry.findMany({
     where: {
@@ -15,10 +17,11 @@ async function triggerExport(yearMonth) {
       }
     }
   });
+  console.log(`[EXPORT] Found trips:`, trips.length);
+
 
   // Groepeer per gebruiker
   const map = new Map();
-
   for (const t of trips) {
     const g =
       map.get(t.userId) || {
@@ -39,11 +42,12 @@ async function triggerExport(yearMonth) {
 
     map.set(t.userId, g);
   }
+  console.log(`[EXPORT] Users with trips:`, map.size);
 
   // Upsert MonthlyExport per gebruiker
   const results = [];
-
   for (const [userId, g] of map.entries()) {
+    console.log(`[EXPORT] Upsert export for userId=${userId}, yearMonth=${yearMonth}, data=`, g);
     const exportRow = await prisma.monthlyExport.upsert({
       where: {
         userId_yearMonth: { userId, yearMonth }
@@ -65,10 +69,9 @@ async function triggerExport(yearMonth) {
         status: ExportStatus.GENERATED
       }
     });
-
     results.push(exportRow);
   }
-
+  console.log(`[EXPORT] Upserted exports:`, results.length);
   return results;
 }
 
