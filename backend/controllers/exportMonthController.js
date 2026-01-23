@@ -6,13 +6,14 @@ exports.getAvailableExportMonths = async (req, res) => {
   try {
     // Alleen voor ADMIN en PAYROLL
     if (!['ADMIN', 'PAYROLL'].includes(req.user.role)) return res.status(403).json({ error: 'FORBIDDEN' });
-    // Haal alle unieke maanden op waarvoor exports bestaan
-    const months = await prisma.monthlyExport.findMany({
-      select: { yearMonth: true },
-      distinct: ['yearMonth'],
-      orderBy: { yearMonth: 'desc' }
+    // Haal alle unieke maanden op waarin ritten zijn geregistreerd (TripEntry)
+    const months = await prisma.tripEntry.findMany({
+      select: { date: true },
+      orderBy: { date: 'desc' }
     });
-    res.json(months.map(m => m.yearMonth));
+    // Uniek per maand (YYYY-MM)
+    const uniqueMonths = [...new Set(months.map(t => t.date.slice(0, 7)))];
+    res.json(uniqueMonths);
   } catch (err) {
     res.status(500).json({ error: 'EXPORT_MONTHS_ERROR' });
   }

@@ -223,7 +223,11 @@
         <div class="export-box">
           <div class="form-group">
             <label>Selecteer Maand</label>
-            <input type="month" v-model="exportMonth" class="month-input"/>
+            <select v-model="exportMonth" class="month-input">
+              <option v-for="m in exportMonthOptions" :key="m.value" :value="m.value">
+                {{ m.label }}
+              </option>
+            </select>
           </div>
           <button
             @click="triggerExport"
@@ -269,6 +273,30 @@ const settingsMsg = ref('');
 const settingsError = ref('');
 
 const exportMonth = ref(new Date().toISOString().slice(0, 7));
+const exportMonthOptions = ref([]); // [{ value: '2026-01', label: 'januari 2026' }, ...]
+
+async function fetchAvailableExportMonths() {
+  try {
+    const res = await fetch(`${API}/exports/months`, {
+      headers: userStore.getAuthHeaders(false),
+    });
+    if (!res.ok) return;
+    const months = await res.json(); // ["2026-01", ...]
+    exportMonthOptions.value = months.map((value) => {
+      const [y, m] = value.split('-').map(Number);
+      const d = new Date(y, m - 1, 1);
+      const label = d.toLocaleString('nl-BE', { month: 'long', year: 'numeric' });
+      return { value, label };
+    });
+    // Default: als huidige exportMonth niet in lijst zit -> pak eerste
+    if (exportMonthOptions.value.length) {
+      const exists = exportMonthOptions.value.some(o => o.value === exportMonth.value);
+      if (!exists) exportMonth.value = exportMonthOptions.value[0].value;
+    }
+  } catch (e) {
+    console.error('Fout bij ophalen export maanden', e);
+  }
+}
 const exportMsg = ref("");
 const exportError = ref("");
 
@@ -462,5 +490,6 @@ onMounted(async () => {
   await userStore.fetchMe();
   await fetchEmployees();
   await fetchSettings();
+  await fetchAvailableExportMonths();
 });
 </script>
